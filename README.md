@@ -46,25 +46,12 @@ COURSES_PAGE=kurslar/
 GROQ_API_KEY=your_groq_key_here
 ```
 
-## Entry Points
+## Entry Point
 
-Preferred:
+Use the package entrypoint:
 
 ```bash
 python3 -m learnpress_dl --help
-```
-
-Convenience wrapper:
-
-```bash
-python3 learnpress_dl.py --help
-```
-
-Legacy compatibility wrapper:
-
-```bash
-python3 learnpress_course_downloader.py --help
-python3 -m yzm_dl --help
 ```
 
 ## Authentication
@@ -267,4 +254,4 @@ downloads/
 
 The project is now positioned as a generic LearnPress downloader, not a site-specific downloader.
 
-See `refactoring-plan.md` for the next cleanup phases.
+Project-only downloader docs now live in this README.

@@ -146,6 +146,63 @@ def read_json(path, default=None):
         return json.load(handle)
 
 
+def _sanitize_cookie_file(cookie_file):
+    sanitized_lines = ["# Netscape HTTP Cookie File\n"]
+    kept_cookie_lines = 0
+
+    with open(cookie_file, "r", encoding="utf-8", errors="replace") as handle:
+        for raw_line in handle:
+            stripped = raw_line.strip()
+            if not stripped:
+                sanitized_lines.append("\n")
+                continue
+            if stripped.startswith("#"):
+                if stripped != "# Netscape HTTP Cookie File":
+                    sanitized_lines.append(raw_line if raw_line.endswith("\n") else raw_line + "\n")
+                continue
+            if len(raw_line.rstrip("\n").split("\t")) == 7:
+                sanitized_lines.append(raw_line if raw_line.endswith("\n") else raw_line + "\n")
+                kept_cookie_lines += 1
+
+    temp_handle = tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False)
+    try:
+        temp_handle.writelines(sanitized_lines)
+    finally:
+        temp_handle.close()
+    return temp_handle.name, kept_cookie_lines
+
+
+def load_cookie_jar(cookie_file, retries=3, retry_delay=0.2):
+    last_exc = None
+    for attempt in range(max(1, retries)):
+        jar = http.cookiejar.MozillaCookieJar()
+        try:
+            jar.load(cookie_file, ignore_discard=True, ignore_expires=True)
+            return jar
+        except http.cookiejar.LoadError as exc:
+            last_exc = exc
+            if attempt < max(1, retries) - 1:
+                time.sleep(retry_delay * (attempt + 1))
+
+    sanitized_path = None
+    try:
+        sanitized_path, kept_cookie_lines = _sanitize_cookie_file(cookie_file)
+        if kept_cookie_lines <= 0:
+            raise RuntimeError(f"Cookie file could not be parsed as Netscape format: {cookie_file}") from last_exc
+        jar = http.cookiejar.MozillaCookieJar()
+        jar.load(sanitized_path, ignore_discard=True, ignore_expires=True)
+        log(
+            f"[http] cookie file had malformed lines; loaded sanitized copy with {kept_cookie_lines} cookies",
+            level="WARNING",
+        )
+        return jar
+    except http.cookiejar.LoadError as exc:
+        raise RuntimeError(f"Cookie file could not be parsed as Netscape format: {cookie_file}") from exc
+    finally:
+        if sanitized_path and os.path.exists(sanitized_path):
+            os.remove(sanitized_path)
+
+
 def is_retryable_error(exc):
     message = str(exc)
     retry_markers = (
@@ -420,8 +477,7 @@ class Downloader:
         handlers = []
 
         if self.cookie_file:
-            jar = http.cookiejar.MozillaCookieJar()
-            jar.load(self.cookie_file, ignore_discard=True, ignore_expires=True)
+            jar = load_cookie_jar(self.cookie_file)
             self.cookie_jar = jar
             handlers.append(urllib.request.HTTPCookieProcessor(jar))
 

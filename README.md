@@ -46,19 +46,12 @@ COURSES_PAGE=kurslar/
 GROQ_API_KEY=your_groq_key_here
 ```
 
-## Entry Points
+## Entry Point
 
-Preferred:
+Use the package entrypoint:
 
 ```bash
 python3 -m learnpress_dl --help
-```
-
-Wrapper scripts:
-
-```bash
-python3 learnpress_dl.py --help
-python3 learnpress_course_downloader.py --help
 ```
 
 ## Authentication

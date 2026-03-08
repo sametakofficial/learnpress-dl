@@ -168,6 +168,57 @@ class InventoryTests(unittest.TestCase):
             self.assertEqual(CHECK_MODE_FAST, check["check_mode"])
             self.assertEqual(1, check["local"]["completed_lessons"])
 
+    def test_shallow_check_keeps_failed_lessons_actionable_on_rerun(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            lesson_dir = os.path.join(tmpdir, "01-intro", "01-welcome")
+            os.makedirs(lesson_dir)
+            with open(os.path.join(lesson_dir, "progress.json"), "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "lesson_url": "https://www.example.com/courses/course-one/lessons/welcome/",
+                        "classification": "video",
+                        "status": "failed",
+                        "steps": {
+                            "page_fetch": "completed",
+                            "materials_fetch": "completed",
+                            "video_download": "failed",
+                            "audio_extract": "pending",
+                            "transcript": "pending",
+                            "render_html": "completed",
+                            "render_text": "completed",
+                            "write_json": "completed",
+                            "finalize": "completed",
+                        },
+                    },
+                    handle,
+                )
+
+            remote_lessons = [
+                {
+                    "url": "https://www.example.com/courses/course-one/lessons/welcome/",
+                    "title": "Welcome",
+                    "section_title": "Intro",
+                    "section_index": 1,
+                    "lesson_in_section": 1,
+                }
+            ]
+            check = build_course_check_from_lessons(
+                course_title="Course One",
+                course_url="https://www.example.com/courses/course-one/",
+                continue_url=remote_lessons[0]["url"],
+                output_dir=tmpdir,
+                remote_lessons=remote_lessons,
+                local_lessons_by_url={},
+                section_count=1,
+                check_mode=CHECK_MODE_FAST,
+            )
+
+            self.assertEqual("partial", check["status"])
+            self.assertEqual(1, check["local"]["failed_lessons"])
+            self.assertEqual(1, check["diff"]["failed_lessons"])
+            self.assertEqual(1, check["diff"]["partial_lessons"])
+            self.assertEqual(0, check["local"]["completed_lessons"])
+
     def test_deep_validate_lesson_detects_missing_content_files(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             lesson_dir = os.path.join(tmpdir, "lesson")

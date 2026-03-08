@@ -51,77 +51,26 @@ def parse_iframe_video_sources(iframes):
     return sources
 
 
-def pick_dailymotion_hls(metadata):
-    qualities = metadata.get("qualities") or {}
-    preferred = []
-    if "auto" in qualities:
-        preferred.extend(qualities["auto"])
-    for key in sorted(qualities.keys(), reverse=True):
-        if key != "auto":
-            preferred.extend(qualities[key])
-
-    for item in preferred:
-        if item.get("type") == "application/x-mpegURL" and item.get("url"):
-            return item["url"]
-    return None
-
-
-def fetch_dailymotion_stream(downloader, video_id, page_url, retries=3, retry_delay=2.0):
-    metadata_url = (
-        f"https://www.dailymotion.com/player/metadata/video/{video_id}?"
-        f"embedder={urllib.parse.quote(page_url, safe='')}"
-    )
-    metadata = retry_call(
-        lambda: downloader.request_json(metadata_url, headers={"Referer": page_url}),
-        retries=retries,
-        base_delay=retry_delay,
-        should_retry=is_retryable_error,
-        on_retry=lambda attempt, total, exc, delay: log(
-            f"[media] Dailymotion metadata retry {attempt}/{total}: {exc} ({delay:.1f}s)",
-            level="WARNING",
-        ),
-    )
-    stream_url = pick_dailymotion_hls(metadata)
-    if not stream_url:
-        raise RuntimeError(f"Dailymotion stream was not found for {video_id}")
-    return {
-        "provider": "dailymotion",
-        "video_id": video_id,
-        "title": metadata.get("title") or video_id,
-        "stream_url": stream_url,
-        "metadata_url": metadata_url,
-    }
-
-
-def download_hls_video(stream_url, output_path, page_url, timeout_seconds):
-    plain_command = ["ffmpeg", "-y", "-loglevel", "error", "-i", stream_url, "-c", "copy", output_path]
-    try:
-        run_command(plain_command, timeout=timeout_seconds)
-        return
-    except RuntimeError:
-        header_command = [
-            "ffmpeg",
-            "-y",
-            "-loglevel",
-            "error",
-            "-user_agent",
-            DEFAULT_UA,
-            "-headers",
-            f"Referer: {page_url}\r\n",
-            "-i",
-            stream_url,
-            "-c",
-            "copy",
-            output_path,
-        ]
-        run_command(header_command, timeout=timeout_seconds)
-
-
-def download_with_ytdlp(iframe_src, output_path, page_url, timeout_seconds):
+def download_with_ytdlp(downloader, iframe_src, output_path, page_url, timeout_seconds, include_cookies=True):
     tool = shutil.which("yt-dlp")
     if not tool:
         raise RuntimeError("yt-dlp is not installed")
-    command = [tool, "--referer", page_url, "--no-playlist", "-o", output_path, iframe_src]
+    command = [
+        tool,
+        "--referer",
+        page_url,
+        "--user-agent",
+        DEFAULT_UA,
+        "--no-playlist",
+    ]
+    if include_cookies:
+        if getattr(downloader, "cookie_file", None):
+            command.extend(["--cookies", downloader.cookie_file])
+        elif getattr(downloader, "cookie_header", None):
+            command.extend(["--add-header", f"Cookie: {downloader.cookie_header}"])
+    else:
+        command.append("--no-cookies")
+    command.extend(["-o", output_path, iframe_src])
     run_command(command, timeout=timeout_seconds)
 
 
@@ -136,42 +85,19 @@ def download_videos_for_lesson(downloader, lesson_dir, page_url, parser, timeout
         video_slug = slugify(source_title, fallback=f"video-{source_index:02d}")
         target_base = os.path.join(lesson_dir, f"video-{source_index:02d}-{video_slug}")
 
-        if provider == "dailymotion" and source.get("video_id"):
-            target_path = f"{target_base}.mp4"
-            if not os.path.exists(target_path):
-                stream = fetch_dailymotion_stream(
-                    downloader,
-                    source["video_id"],
-                    page_url,
-                    retries=retries,
-                    retry_delay=retry_delay,
-                )
-                retry_call(
-                    lambda: download_hls_video(stream["stream_url"], target_path, page_url, timeout_seconds),
-                    retries=retries,
-                    base_delay=retry_delay,
-                    should_retry=is_retryable_error,
-                    on_retry=lambda attempt, total, exc, delay: log(
-                        f"[media] video download retry {attempt}/{total}: {exc} ({delay:.1f}s)",
-                        level="WARNING",
-                    ),
-                )
-            downloaded.append(
-                {
-                    "provider": provider,
-                    "title": source_title,
-                    "iframe_src": source["iframe_src"],
-                    "video_id": source.get("video_id"),
-                    "file": os.path.basename(target_path),
-                }
-            )
-            continue
-
         target_path = f"{target_base}.%(ext)s"
         matches = [name for name in os.listdir(lesson_dir) if name.startswith(os.path.basename(target_base) + ".")]
         if not matches:
+            include_cookies = provider != "dailymotion"
             retry_call(
-                lambda: download_with_ytdlp(source["iframe_src"], target_path, page_url, timeout_seconds),
+                lambda: download_with_ytdlp(
+                    downloader,
+                    source["iframe_src"],
+                    target_path,
+                    page_url,
+                    timeout_seconds,
+                    include_cookies=include_cookies,
+                ),
                 retries=retries,
                 base_delay=retry_delay,
                 should_retry=is_retryable_error,

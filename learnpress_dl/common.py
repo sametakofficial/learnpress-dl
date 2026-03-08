@@ -3,6 +3,7 @@ import http.cookiejar
 import json
 import random
 import os
+import shutil
 import sys
 import tempfile
 import re
@@ -280,6 +281,16 @@ def derive_download_root(start_url, downloads_dir=None):
     pieces = [parsed.netloc] + [part for part in parsed.path.split("/") if part]
     folder_name = slugify("-".join(pieces), fallback="download")
     return os.path.join(downloads_dir or DEFAULT_DOWNLOADS_DIR, folder_name)
+
+
+def zip_directory(directory_path, archive_base_path=None):
+    if not os.path.isdir(directory_path):
+        raise RuntimeError(f"Directory does not exist: {directory_path}")
+    normalized = os.path.abspath(directory_path)
+    parent = os.path.dirname(normalized)
+    base_name = archive_base_path or normalized
+    archive_path = shutil.make_archive(base_name, "zip", root_dir=parent, base_dir=os.path.basename(normalized))
+    return archive_path
 
 
 def build_multipart_formdata(fields, file_field_name, file_path, file_mime):

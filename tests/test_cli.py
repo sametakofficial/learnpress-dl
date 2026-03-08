@@ -15,10 +15,18 @@ class CliTests(unittest.TestCase):
 
     def test_parser_uses_optional_url_and_check_depth(self):
         parser = build_parser()
-        args = parser.parse_args(["--check-depth", "deep", "https://example.com/course"])
+        args = parser.parse_args(["--check-depth", "deep", "--zip-courses", "--parallel", "8", "https://example.com/course"])
 
         self.assertEqual("https://example.com/course", args.url)
         self.assertEqual("deep", args.check_depth)
+        self.assertTrue(args.zip_courses)
+        self.assertEqual(8, args.parallel)
+
+    def test_text_workers_alias_maps_to_parallel(self):
+        parser = build_parser()
+        args = parser.parse_args(["--text-workers", "6"])
+
+        self.assertEqual(6, args.parallel)
 
     def test_verbose_and_quiet_conflict(self):
         parser = build_parser()

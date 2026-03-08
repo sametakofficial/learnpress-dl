@@ -152,7 +152,9 @@ def _build_shallow_local_lessons_by_url(output_dir, remote_lessons):
     for lesson in remote_lessons:
         lesson_dir = _expected_lesson_dir(output_dir, lesson)
         if lesson_dir and os.path.isdir(lesson_dir):
-            lessons_by_url[lesson["url"]] = {"lesson_dir": lesson_dir}
+            entry = _lesson_inventory_from_dir(lesson_dir) or {}
+            entry["lesson_dir"] = lesson_dir
+            lessons_by_url[lesson["url"]] = entry
     return lessons_by_url
 
 
@@ -255,6 +257,11 @@ def _classify_lesson_coverage(remote_lessons, local_lessons_by_url, require_vide
             missing.append(lesson_url)
             continue
         if check_mode == CHECK_MODE_FAST:
+            progress = local_entry.get("progress") or {}
+            if progress.get("status") == "failed":
+                failed.append(lesson_url)
+                partial.append(lesson_url)
+                continue
             completed.append(lesson_url)
             continue
         progress = local_entry.get("progress")

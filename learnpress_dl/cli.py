@@ -1,7 +1,7 @@
 import argparse
 
-from .common import PROJECT_ENV_PATH, resolve_base_url, resolve_courses_page, set_log_level
-from .course_runner import run_single_course
+from .common import PROJECT_ENV_PATH, derive_download_root, resolve_base_url, resolve_courses_page, set_log_level, zip_directory
+from .course_runner import course_run_succeeded, run_single_course
 from .site_runner import run_all_courses
 
 
@@ -36,8 +36,16 @@ def build_parser():
     parser.add_argument("--download-transcripts", action="store_true", help="Generate transcripts for downloaded videos.")
     parser.add_argument("--transcript-timeout", type=float, default=1800.0, help="Timeout for a single transcript request in seconds.")
     parser.add_argument("--audio-timeout", type=float, default=1800.0, help="Timeout for local audio extraction in seconds.")
+    parser.add_argument("--zip-courses", action="store_true", help="Create zip archive(s) for successful course outputs.")
     parser.add_argument("--dotenv-path", default=PROJECT_ENV_PATH, help="Path to the .env file used for configuration.")
-    parser.add_argument("--text-workers", type=int, default=4, help="Worker count for text-only lessons.")
+    parser.add_argument(
+        "--parallel",
+        "--text-workers",
+        dest="parallel",
+        type=int,
+        default=4,
+        help="Maximum number of lessons to process in parallel.",
+    )
     parser.add_argument("--retry-count", type=int, default=3, help="Retry count for transient failures.")
     parser.add_argument("--retry-delay", type=float, default=2.0, help="Base retry backoff delay in seconds.")
     return parser
@@ -90,7 +98,11 @@ def main(argv=None):
 
     target_scope = resolve_target_scope(args.url, base_url)
     if target_scope == "single":
-        run_single_course(args, args.url, output_dir=args.output_dir)
+        result = run_single_course(args, args.url, output_dir=args.output_dir)
+        if args.zip_courses and course_run_succeeded(result):
+            output_dir = result.get("output_dir") or args.output_dir or derive_download_root(args.url)
+            archive_path = zip_directory(output_dir)
+            print(f"Created course archive: {archive_path}", flush=True)
         return
 
     if target_scope != "multi":

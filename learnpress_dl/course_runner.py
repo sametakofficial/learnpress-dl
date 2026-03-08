@@ -417,6 +417,52 @@ def process_lesson_context(context, args, groq_api_key, require_videos, require_
     return saved, progress
 
 
+def process_lesson_contexts(contexts, course_args, groq_api_key, require_videos, require_transcripts, progress_ui=None, course_key=None):
+    saved_by_url = {}
+    progress_by_url = {}
+    if not contexts:
+        return saved_by_url, progress_by_url
+
+    worker_count = max(1, int(getattr(course_args, "parallel", 1) or 1))
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        future_map = {
+            executor.submit(
+                process_lesson_context,
+                context,
+                course_args,
+                groq_api_key,
+                require_videos,
+                require_transcripts,
+                progress_ui,
+                course_key,
+            ): context
+            for context in contexts
+        }
+        for future in as_completed(future_map):
+            context = future_map[future]
+            try:
+                saved, progress = future.result()
+                saved_by_url[context["lesson"]["url"]] = saved
+                progress_by_url[context["lesson"]["url"]] = progress
+                log(f"[download] saved lesson {context['index']}/{context['total']}: {saved['title']}", level="SUCCESS")
+            except RuntimeError as exc:
+                progress = context["progress"]
+                set_status(progress, "failed", error=str(exc))
+                save_progress(context["lesson_dir"], progress)
+                progress_by_url[context["lesson"]["url"]] = progress
+                if progress_ui and course_key:
+                    progress_ui.set_lesson_status(
+                        course_key,
+                        context["lesson"]["url"],
+                        "failed",
+                        title=context["lesson_title"],
+                        section_title=context["lesson"].get("section_title"),
+                    )
+                log(f"[download] lesson failed {context['index']}/{context['total']}: {exc}", level="WARNING")
+
+    return saved_by_url, progress_by_url
+
+
 def finalize_manifest_and_state(args, manifest, saved_by_url, progress_by_url, state, emit_summary=True):
     manifest["lessons"] = sorted(saved_by_url.values(), key=lambda item: item.get("global_index") or 0)
     write_text(os.path.join(args.output_dir, "manifest.json"), json.dumps(manifest, ensure_ascii=False, indent=2))
@@ -437,6 +483,15 @@ def finalize_manifest_and_state(args, manifest, saved_by_url, progress_by_url, s
         if first_meta:
             summary_lines.append("First lesson: " + os.path.abspath(os.path.join(args.output_dir, first_meta["directories"]["lesson"])))
         print("\n" + "\n".join(summary_lines), flush=True)
+
+
+def course_run_succeeded(result):
+    if not result:
+        return False
+    failed = int(result.get("failed") or 0)
+    completed = int(result.get("completed") or 0)
+    total = int(result.get("total") or 0)
+    return failed == 0 and completed >= total
 
 
 def run_single_course(args, start_url, output_dir=None, progress_ui=None, course_key=None, course_title_hint=None):
@@ -554,7 +609,12 @@ def run_single_course(args, start_url, output_dir=None, progress_ui=None, course
             log("[download] Nothing to do. This course already satisfies the requested outputs.", level="SUCCESS")
             if progress_ui:
                 progress_ui.set_course_status(effective_course_key, "complete")
-            return {"completed": single_check["local"]["completed_lessons"], "failed": single_check["local"]["failed_lessons"], "total": len(lesson_items)}
+            return {
+                "completed": single_check["local"]["completed_lessons"],
+                "failed": single_check["local"]["failed_lessons"],
+                "total": len(lesson_items),
+                "output_dir": course_args.output_dir,
+            }
 
         sync_course_tree(
             progress_ui,
@@ -597,52 +657,17 @@ def run_single_course(args, start_url, output_dir=None, progress_ui=None, course
             "lessons": [],
         }
 
-        if text_contexts:
-            worker_count = max(1, course_args.text_workers)
-            with ThreadPoolExecutor(max_workers=worker_count) as executor:
-                future_map = {
-                    executor.submit(process_lesson_context, context, course_args, groq_api_key, False, False, progress_ui, effective_course_key): context
-                    for context in text_contexts
-                }
-                for future in as_completed(future_map):
-                    context = future_map[future]
-                    try:
-                        saved, progress = future.result()
-                        saved_by_url[context["lesson"]["url"]] = saved
-                        progress_by_url[context["lesson"]["url"]] = progress
-                        log(f"[download] saved lesson {context['index']}/{context['total']}: {saved['title']}", level="SUCCESS")
-                    except RuntimeError as exc:
-                        progress = context["progress"]
-                        set_status(progress, "failed", error=str(exc))
-                        save_progress(context["lesson_dir"], progress)
-                        progress_by_url[context["lesson"]["url"]] = progress
-                        if progress_ui and effective_course_key:
-                            progress_ui.set_lesson_status(effective_course_key, context["lesson"]["url"], "failed", title=context["lesson_title"], section_title=context["lesson"].get("section_title"))
-                        log(f"[download] text lesson failed {context['index']}/{context['total']}: {exc}", level="WARNING")
-
-        for queue in (media_contexts, other_contexts):
-            for context in queue:
-                try:
-                    saved, progress = process_lesson_context(
-                        context,
-                        course_args,
-                        groq_api_key,
-                        require_videos=require_videos,
-                        require_transcripts=require_transcripts,
-                        progress_ui=progress_ui,
-                        course_key=effective_course_key,
-                    )
-                    saved_by_url[context["lesson"]["url"]] = saved
-                    progress_by_url[context["lesson"]["url"]] = progress
-                    log(f"[download] saved lesson {context['index']}/{context['total']}: {saved['title']}", level="SUCCESS")
-                except RuntimeError as exc:
-                    progress = context["progress"]
-                    set_status(progress, "failed", error=str(exc))
-                    save_progress(context["lesson_dir"], progress)
-                    progress_by_url[context["lesson"]["url"]] = progress
-                    if progress_ui and effective_course_key:
-                        progress_ui.set_lesson_status(effective_course_key, context["lesson"]["url"], "failed", title=context["lesson_title"], section_title=context["lesson"].get("section_title"))
-                    log(f"[download] lesson failed {context['index']}/{context['total']}: {exc}", level="WARNING")
+        processed_saved, processed_progress = process_lesson_contexts(
+            text_contexts + media_contexts + other_contexts,
+            course_args,
+            groq_api_key,
+            require_videos=require_videos,
+            require_transcripts=require_transcripts,
+            progress_ui=progress_ui,
+            course_key=effective_course_key,
+        )
+        saved_by_url.update(processed_saved)
+        progress_by_url.update(processed_progress)
 
         finalize_manifest_and_state(
             course_args,
@@ -656,6 +681,11 @@ def run_single_course(args, start_url, output_dir=None, progress_ui=None, course
         if progress_ui and effective_course_key:
             final_status = "finished" if completed >= len(lesson_items) and failed == 0 else ("failed" if failed and completed == 0 else "partial")
             progress_ui.set_course_status(effective_course_key, final_status)
-        return {"completed": completed, "failed": failed, "total": len(lesson_items)}
+        return {
+            "completed": completed,
+            "failed": failed,
+            "total": len(lesson_items),
+            "output_dir": course_args.output_dir,
+        }
     finally:
         release_course_lock(course_args.output_dir)

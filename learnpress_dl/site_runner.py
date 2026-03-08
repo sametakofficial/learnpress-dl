@@ -1,7 +1,7 @@
 import sys
 
-from .common import DEFAULT_DOWNLOADS_DIR, derive_download_root, ensure_dir, log
-from .course_runner import build_downloader_from_args, print_course_check_summary, run_single_course
+from .common import DEFAULT_DOWNLOADS_DIR, derive_download_root, ensure_dir, log, zip_directory
+from .course_runner import build_downloader_from_args, course_run_succeeded, print_course_check_summary, run_single_course
 from .discovery import bootstrap_course, discover_courses
 from .inventory import (
     build_bootstrap_failed_check,
@@ -62,6 +62,12 @@ def should_use_tree_progress(args):
     if args.tree_progress is not None:
         return args.tree_progress
     return sys.stdout.isatty()
+
+
+def course_check_succeeded(check):
+    local = check.get("local") or {}
+    remote = check.get("remote") or {}
+    return int(local.get("failed_lessons") or 0) == 0 and int(local.get("completed_lessons") or 0) >= int(remote.get("lesson_count") or 0)
 
 
 def run_all_courses(args, parser, base_url, courses_page):
@@ -143,6 +149,7 @@ def run_all_courses(args, parser, base_url, courses_page):
 
         course_plans = []
         actionable_courses = []
+        successful_course_dirs = []
         for course_info, check in zip(course_infos_for_plan, check_results):
             local_record = match_local_course(local_index, course_info) if check.get("continue_url") else None
             course_plan = build_course_plan(
@@ -157,6 +164,8 @@ def run_all_courses(args, parser, base_url, courses_page):
             tree_ui.set_course_status(course_info.get("url"), course_plan["status"])
             if course_plan["status"] == "complete":
                 log(f"[download] Skipping already complete course: {course_plan['course_title']}", level="SUCCESS")
+                if course_check_succeeded(check) and course_plan.get("output_dir"):
+                    successful_course_dirs.append(course_plan["output_dir"])
             elif course_plan["status"] in {"resume_needed", "recovery_needed", "new"}:
                 actionable_courses.append((course_info, check, course_plan))
 
@@ -184,11 +193,8 @@ def run_all_courses(args, parser, base_url, courses_page):
         )
         if not actionable_courses and bootstrap_failed_count == 0:
             log("[download] Nothing to do. All courses already satisfy the requested outputs.", level="SUCCESS")
-            return
-
-        if not actionable_courses:
+        elif not actionable_courses:
             log("[download] No actionable lessons found.", level="SUCCESS")
-            return
 
         for course_info, check, course_plan in actionable_courses:
             course_key = course_info.get("resolved_url") or course_info.get("url")
@@ -208,7 +214,7 @@ def run_all_courses(args, parser, base_url, courses_page):
                 f"[download] Starting {course_info.get('title') or course_info['url']} status={course_plan['status']} details={', '.join(reason) or 'work_pending'}"
             )
             tree_ui.set_course_status(course_key, "running")
-            run_single_course(
+            result = run_single_course(
                 args,
                 course_info["continue_url"],
                 output_dir=course_output_dir,
@@ -216,5 +222,12 @@ def run_all_courses(args, parser, base_url, courses_page):
                 course_key=course_key,
                 course_title_hint=course_info.get("title"),
             )
+            if course_run_succeeded(result):
+                successful_course_dirs.append(result.get("output_dir") or course_output_dir)
+
+        if args.zip_courses:
+            for output_dir in sorted(set(directory for directory in successful_course_dirs if directory)):
+                archive_path = zip_directory(output_dir)
+                log(f"[archive] Created course zip: {archive_path}", level="SUCCESS")
     finally:
         tree_ui.finish()

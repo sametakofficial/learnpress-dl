@@ -12,7 +12,7 @@ It supports:
 - persisted `check` and `plan` files
 - optional video download and optional transcript generation
 - local-only failed lesson retries with `--retry-failed`
-- optional timestamped zip archives with `--zip-courses`
+- optional timestamped run archives with `--zip-courses`
 
 ## Requirements
 
@@ -189,7 +189,7 @@ python3 -m learnpress_dl \
 - `--retry-failed`
   - skip compare/check and retry only locally failed lessons from saved progress files
 - `--zip-courses`
-  - create timestamped zip archives at the end of the run
+  - create one timestamped zip archive for the run output directory at the end of the run
 - `--verbose`
   - enable debug logging
 - `--quiet`
@@ -228,9 +228,9 @@ Current behavior:
 
 When `--zip-courses` is enabled, the downloader creates timestamped `.zip` archives at the end of the run.
 
-- single-course runs archive that course output directory
-- site-wide runs archive each discovered course output directory
-- `--retry-failed` runs also archive the affected local course directories
+- single-course runs archive that single course output directory
+- site-wide runs archive the full run output directory once
+- `--retry-failed` runs also archive the full run output directory once
 
 ## Logging
 

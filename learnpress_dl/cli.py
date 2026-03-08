@@ -44,7 +44,7 @@ def build_parser():
     parser.add_argument("--download-transcripts", action="store_true", help="Generate transcripts for downloaded videos.")
     parser.add_argument("--transcript-timeout", type=float, default=1800.0, help="Timeout for a single transcript request in seconds.")
     parser.add_argument("--audio-timeout", type=float, default=1800.0, help="Timeout for local audio extraction in seconds.")
-    parser.add_argument("--zip-courses", action="store_true", help="Create timestamped zip archive(s) for course outputs at the end of the run.")
+    parser.add_argument("--zip-courses", action="store_true", help="Create one timestamped zip archive for the run output directory at the end of the run.")
     parser.add_argument("--retry-failed", action="store_true", help="Skip check mode and retry only locally failed lessons from saved progress files.")
     parser.add_argument("--dotenv-path", default=PROJECT_ENV_PATH, help="Path to the .env file used for configuration.")
     parser.add_argument(
@@ -111,7 +111,7 @@ def main(argv=None):
             result = run_single_course(args, args.url, output_dir=output_dir)
             if args.zip_courses:
                 archive_path = zip_directory(output_dir, archive_base_path=timestamped_archive_base_path(output_dir))
-                print(f"Created course archive: {archive_path}", flush=True)
+                print(f"Created run archive: {archive_path}", flush=True)
             return
         run_retry_failed_courses(args)
         return
@@ -122,7 +122,7 @@ def main(argv=None):
         if args.zip_courses:
             output_dir = result.get("output_dir") or args.output_dir or derive_download_root(args.url)
             archive_path = zip_directory(output_dir, archive_base_path=timestamped_archive_base_path(output_dir))
-            print(f"Created course archive: {archive_path}", flush=True)
+            print(f"Created run archive: {archive_path}", flush=True)
         return
 
     if target_scope != "multi":

@@ -3,7 +3,7 @@ import time
 import sys
 
 from .common import DEFAULT_DOWNLOADS_DIR, derive_download_root, ensure_dir, log, timestamped_archive_base_path, zip_directory
-from .course_runner import build_downloader_from_args, collect_failed_lesson_urls, course_run_succeeded, print_course_check_summary, run_single_course
+from .course_runner import build_downloader_from_args, collect_failed_lesson_urls, print_course_check_summary, run_single_course
 from .discovery import bootstrap_course, discover_courses
 from .inventory import (
     build_bootstrap_failed_check,
@@ -83,21 +83,16 @@ def list_local_course_output_dirs(base_output_dir):
     return sorted(course_dirs)
 
 
-def create_course_archives(output_dirs):
-    archive_paths = []
-    timestamp = time.strftime("%Y%m%d-%H%M%S", time.localtime())
-    for output_dir in sorted(set(directory for directory in output_dirs if directory and os.path.isdir(directory))):
-        archive_path = zip_directory(output_dir, archive_base_path=timestamped_archive_base_path(output_dir, timestamp=timestamp))
-        log(f"[archive] Created course zip: {archive_path}", level="SUCCESS")
-        archive_paths.append(archive_path)
-    return archive_paths
+def create_run_archive(output_dir):
+    archive_path = zip_directory(output_dir, archive_base_path=timestamped_archive_base_path(output_dir, timestamp=time.strftime("%Y%m%d-%H%M%S", time.localtime())))
+    log(f"[archive] Created run zip: {archive_path}", level="SUCCESS")
+    return archive_path
 
 
 def run_retry_failed_courses(args):
     base_output_dir = args.output_dir or DEFAULT_DOWNLOADS_DIR
     ensure_dir(base_output_dir)
     tree_ui = TreeProgressUI(enabled=should_use_tree_progress(args))
-    archived_dirs = []
     try:
         course_dirs = list_local_course_output_dirs(base_output_dir)
         if not course_dirs:
@@ -123,10 +118,9 @@ def run_retry_failed_courses(args):
                 course_key=state.get("resolved_url") or start_url or course_dir,
                 course_title_hint=course_title,
             )
-            archived_dirs.append(result.get("output_dir") or course_dir)
 
         if args.zip_courses:
-            create_course_archives(archived_dirs or course_dirs)
+            create_run_archive(base_output_dir)
     finally:
         tree_ui.finish()
 
@@ -210,7 +204,6 @@ def run_all_courses(args, parser, base_url, courses_page):
 
         course_plans = []
         actionable_courses = []
-        archived_course_dirs = []
         for course_info, check in zip(course_infos_for_plan, check_results):
             local_record = match_local_course(local_index, course_info) if check.get("continue_url") else None
             course_plan = build_course_plan(
@@ -222,8 +215,6 @@ def run_all_courses(args, parser, base_url, courses_page):
             )
             write_course_plan(course_plan.get("output_dir"), course_plan, create_dir=False)
             course_plans.append(course_plan)
-            if course_plan.get("output_dir"):
-                archived_course_dirs.append(course_plan["output_dir"])
             tree_ui.set_course_status(course_info.get("url"), course_plan["status"])
             if course_plan["status"] == "complete":
                 log(f"[download] Skipping already complete course: {course_plan['course_title']}", level="SUCCESS")
@@ -283,9 +274,8 @@ def run_all_courses(args, parser, base_url, courses_page):
                 course_key=course_key,
                 course_title_hint=course_info.get("title"),
             )
-            archived_course_dirs.append(result.get("output_dir") or course_output_dir)
 
         if args.zip_courses:
-            create_course_archives(archived_course_dirs)
+            create_run_archive(base_output_dir)
     finally:
         tree_ui.finish()

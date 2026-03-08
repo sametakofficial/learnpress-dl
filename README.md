@@ -56,6 +56,27 @@ Use the package entrypoint:
 python3 -m learnpress_dl --help
 ```
 
+## Windows Release Plan
+
+For non-technical Windows users, the recommended distribution format is a portable release folder instead of a raw Python setup.
+
+Portable release contents:
+
+- `learnpress-dl.exe`
+- `yt-dlp.exe`
+- `ffmpeg.exe`
+- `ffprobe.exe`
+- `.env.example`
+- `run.bat`
+- `retry-failed.bat`
+
+Windows packaging files live in `packaging/windows/`.
+
+Important detail:
+
+- the executable automatically looks for `yt-dlp.exe`, `ffmpeg.exe`, and `ffprobe.exe` next to itself
+- this avoids asking end users to install those tools globally
+
 ## Authentication
 
 Use one of these:

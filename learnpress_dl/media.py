@@ -1,7 +1,6 @@
 import json
 import os
 import re
-import shutil
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -16,6 +15,7 @@ from .common import (
     is_retryable_error,
     log,
     retry_call,
+    resolve_tool_path,
     run_command,
     slugify,
     write_json,
@@ -52,8 +52,8 @@ def parse_iframe_video_sources(iframes):
 
 
 def download_with_ytdlp(downloader, iframe_src, output_path, page_url, timeout_seconds, include_cookies=True):
-    tool = shutil.which("yt-dlp")
-    if not tool:
+    tool = resolve_tool_path("yt-dlp")
+    if tool == "yt-dlp":
         raise RuntimeError("yt-dlp is not installed")
     command = [
         tool,

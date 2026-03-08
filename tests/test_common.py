@@ -7,10 +7,20 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from learnpress_dl.common import load_cookie_jar, timestamped_archive_base_path
+from learnpress_dl.common import load_cookie_jar, resolve_tool_path, timestamped_archive_base_path
 
 
 class CommonTests(unittest.TestCase):
+    def test_resolve_tool_path_prefers_runtime_root_binary(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_tool = os.path.join(tmpdir, "yt-dlp.exe")
+            with open(fake_tool, "w", encoding="utf-8") as handle:
+                handle.write("binary")
+            with mock.patch("learnpress_dl.common.runtime_root", return_value=tmpdir):
+                with mock.patch("learnpress_dl.common.shutil.which", return_value=None):
+                    with mock.patch("learnpress_dl.common.platform.system", return_value="Windows"):
+                        self.assertEqual(fake_tool, resolve_tool_path("yt-dlp"))
+
     def test_timestamped_archive_base_path_appends_suffix(self):
         self.assertEqual(
             "/tmp/course-20260308-090000",

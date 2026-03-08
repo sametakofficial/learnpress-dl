@@ -14,7 +14,7 @@ from learnpress_dl.media import download_videos_for_lesson, download_with_ytdlp
 class MediaTests(unittest.TestCase):
     def test_download_with_ytdlp_sets_headers_and_skips_cookies_when_disabled(self):
         downloader = SimpleNamespace(cookie_file="/tmp/cookies.txt", cookie_header="sid=abc")
-        with mock.patch("learnpress_dl.media.shutil.which", return_value="/usr/bin/yt-dlp"):
+        with mock.patch("learnpress_dl.media.resolve_tool_path", return_value="/usr/bin/yt-dlp"):
             with mock.patch("learnpress_dl.media.run_command") as run_command:
                 download_with_ytdlp(
                     downloader,

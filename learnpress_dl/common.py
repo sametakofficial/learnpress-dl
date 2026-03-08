@@ -3,6 +3,7 @@ import http.cookiejar
 import json
 import random
 import os
+import platform
 import shutil
 import sys
 import tempfile
@@ -126,6 +127,33 @@ def ensure_dir(path):
     os.makedirs(path, exist_ok=True)
 
 
+def runtime_root():
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return PROJECT_ROOT
+
+
+def candidate_tool_paths(tool_name):
+    names = [tool_name]
+    if platform.system().lower().startswith("win") and not tool_name.lower().endswith(".exe"):
+        names.append(f"{tool_name}.exe")
+
+    roots = [runtime_root(), os.path.join(runtime_root(), "bin")]
+    for root in roots:
+        for name in names:
+            yield os.path.join(root, name)
+
+
+def resolve_tool_path(tool_name):
+    resolved = shutil.which(tool_name)
+    if resolved:
+        return resolved
+    for candidate in candidate_tool_paths(tool_name):
+        if os.path.isfile(candidate):
+            return candidate
+    return tool_name
+
+
 def write_text(path, content):
     directory = os.path.dirname(path) or "."
     ensure_dir(directory)
@@ -238,6 +266,9 @@ def retry_call(fn, retries=3, base_delay=2.0, should_retry=None, on_retry=None):
 
 
 def run_command(command, timeout=None):
+    if command:
+        command = list(command)
+        command[0] = resolve_tool_path(command[0])
     try:
         completed = subprocess.run(
             command,

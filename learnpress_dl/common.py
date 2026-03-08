@@ -350,6 +350,12 @@ def zip_directory(directory_path, archive_base_path=None):
     return archive_path
 
 
+def timestamped_archive_base_path(directory_path, timestamp=None):
+    normalized = os.path.abspath(directory_path)
+    stamp = timestamp or time.strftime("%Y%m%d-%H%M%S", time.localtime())
+    return f"{normalized}-{stamp}"
+
+
 def build_multipart_formdata(fields, file_field_name, file_path, file_mime):
     boundary = f"----OpenCodeBoundary{int(time.time() * 1000)}"
     body = bytearray()

@@ -1,8 +1,16 @@
 import argparse
 
-from .common import PROJECT_ENV_PATH, derive_download_root, resolve_base_url, resolve_courses_page, set_log_level, zip_directory
-from .course_runner import course_run_succeeded, run_single_course
-from .site_runner import run_all_courses
+from .common import (
+    PROJECT_ENV_PATH,
+    derive_download_root,
+    resolve_base_url,
+    resolve_courses_page,
+    set_log_level,
+    timestamped_archive_base_path,
+    zip_directory,
+)
+from .course_runner import run_single_course
+from .site_runner import run_all_courses, run_retry_failed_courses
 
 
 def build_parser():
@@ -37,6 +45,7 @@ def build_parser():
     parser.add_argument("--transcript-timeout", type=float, default=1800.0, help="Timeout for a single transcript request in seconds.")
     parser.add_argument("--audio-timeout", type=float, default=1800.0, help="Timeout for local audio extraction in seconds.")
     parser.add_argument("--zip-courses", action="store_true", help="Create zip archive(s) for successful course outputs.")
+    parser.add_argument("--retry-failed", action="store_true", help="Skip check mode and retry only locally failed lessons from saved progress files.")
     parser.add_argument("--dotenv-path", default=PROJECT_ENV_PATH, help="Path to the .env file used for configuration.")
     parser.add_argument(
         "--parallel",
@@ -96,12 +105,23 @@ def main(argv=None):
     args.mode = args.lesson_mode
     args.start_url = args.url
 
+    if args.retry_failed:
+        if args.url:
+            output_dir = args.output_dir or derive_download_root(args.url)
+            result = run_single_course(args, args.url, output_dir=output_dir)
+            if args.zip_courses:
+                archive_path = zip_directory(output_dir, archive_base_path=timestamped_archive_base_path(output_dir))
+                print(f"Created course archive: {archive_path}", flush=True)
+            return
+        run_retry_failed_courses(args)
+        return
+
     target_scope = resolve_target_scope(args.url, base_url)
     if target_scope == "single":
         result = run_single_course(args, args.url, output_dir=args.output_dir)
-        if args.zip_courses and course_run_succeeded(result):
+        if args.zip_courses:
             output_dir = result.get("output_dir") or args.output_dir or derive_download_root(args.url)
-            archive_path = zip_directory(output_dir)
+            archive_path = zip_directory(output_dir, archive_base_path=timestamped_archive_base_path(output_dir))
             print(f"Created course archive: {archive_path}", flush=True)
         return
 

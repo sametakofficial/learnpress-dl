@@ -1,11 +1,12 @@
 import os
 import sys
 import unittest
+from unittest import mock
 
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from learnpress_dl.cli import build_parser, configure_logging, resolve_target_scope
+from learnpress_dl.cli import build_parser, configure_logging, main, resolve_target_scope
 from learnpress_dl.common import LOG_LEVELS, get_log_level, set_log_level
 
 
@@ -28,6 +29,12 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(6, args.parallel)
 
+    def test_parser_supports_retry_failed(self):
+        parser = build_parser()
+        args = parser.parse_args(["--retry-failed"])
+
+        self.assertTrue(args.retry_failed)
+
     def test_verbose_and_quiet_conflict(self):
         parser = build_parser()
         args = parser.parse_args(["--verbose", "--quiet"])
@@ -46,6 +53,21 @@ class CliTests(unittest.TestCase):
         self.assertEqual("single", resolve_target_scope("https://example.com/course", "https://example.com"))
         self.assertEqual("multi", resolve_target_scope(None, "https://example.com"))
         self.assertIsNone(resolve_target_scope(None, None))
+
+    def test_main_zips_single_course_even_when_run_is_partial(self):
+        with mock.patch("learnpress_dl.cli.run_single_course", return_value={"completed": 1, "failed": 1, "total": 2, "output_dir": "/tmp/course"}) as run_single_course:
+            with mock.patch("learnpress_dl.cli.zip_directory", return_value="/tmp/course-20260308-000000.zip") as zip_directory:
+                with mock.patch("builtins.print") as fake_print:
+                    main([
+                        "--cookie-header",
+                        "session=abc",
+                        "--zip-courses",
+                        "https://example.com/course",
+                    ])
+
+        run_single_course.assert_called_once()
+        zip_directory.assert_called_once()
+        fake_print.assert_called()
 
 
 if __name__ == "__main__":

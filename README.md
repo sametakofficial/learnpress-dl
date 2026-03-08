@@ -11,6 +11,8 @@ It supports:
 - `fast` and `deep` compare depths before downloading
 - persisted `check` and `plan` files
 - optional video download and optional transcript generation
+- local-only failed lesson retries with `--retry-failed`
+- optional timestamped zip archives with `--zip-courses`
 
 ## Requirements
 
@@ -109,6 +111,29 @@ python3 -m learnpress_dl \
   --download-transcripts
 ```
 
+### Retry only locally failed lessons
+
+This mode skips the normal compare/check flow. It reads saved local `progress.json` files and retries only lessons that have a failed overall status or a failed step.
+
+Retry a single course output:
+
+```bash
+python3 -m learnpress_dl \
+  --cookie-file "/path/to/cookies.txt" \
+  --output-dir "downloads/course-dir" \
+  --retry-failed \
+  "https://www.example.com/courses/.../lessons/.../"
+```
+
+Retry every locally failed lesson under the downloads root:
+
+```bash
+python3 -m learnpress_dl \
+  --cookie-file "/path/to/cookies.txt" \
+  --output-dir "downloads" \
+  --retry-failed
+```
+
 This flow:
 
 1. discovers courses from `BASE_URL + COURSES_PAGE`
@@ -161,6 +186,10 @@ python3 -m learnpress_dl \
   - download embedded videos for media lessons
 - `--download-transcripts`
   - generate transcripts for downloaded videos
+- `--retry-failed`
+  - skip compare/check and retry only locally failed lessons from saved progress files
+- `--zip-courses`
+  - create timestamped zip archives at the end of the run
 - `--verbose`
   - enable debug logging
 - `--quiet`
@@ -190,9 +219,18 @@ Current behavior:
 - completed lessons are skipped
 - missing lessons are planned as actionable
 - failed lessons are planned for retry
+- `--retry-failed` bypasses compare/check and only retries locally failed lessons
 - transcript files are not regenerated unless the lesson still needs transcript work
 - fast checks only compare sidebar lesson/category structure against local folders
 - deep checks also validate local lesson file sizes and local video/transcript artifacts
+
+## Archives
+
+When `--zip-courses` is enabled, the downloader creates timestamped `.zip` archives at the end of the run.
+
+- single-course runs archive that course output directory
+- site-wide runs archive each discovered course output directory
+- `--retry-failed` runs also archive the affected local course directories
 
 ## Logging
 

@@ -1,5 +1,6 @@
 import os
 import sys
+import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -7,7 +8,8 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from learnpress_dl.course_runner import course_run_succeeded, filter_sections_to_lessons, process_lesson_contexts
+from learnpress_dl.course_runner import collect_failed_lesson_urls, course_run_succeeded, filter_sections_to_lessons, process_lesson_contexts
+from learnpress_dl.common import write_json
 
 
 class CourseRunnerTests(unittest.TestCase):
@@ -38,6 +40,41 @@ class CourseRunnerTests(unittest.TestCase):
         self.assertTrue(course_run_succeeded({"completed": 3, "failed": 0, "total": 3}))
         self.assertFalse(course_run_succeeded({"completed": 2, "failed": 1, "total": 3}))
         self.assertFalse(course_run_succeeded({"completed": 1, "failed": 0, "total": 2}))
+
+    def test_collect_failed_lesson_urls_includes_failed_steps(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            lesson_a = os.path.join(tmpdir, "01-a")
+            lesson_b = os.path.join(tmpdir, "02-b")
+            lesson_c = os.path.join(tmpdir, "03-c")
+            os.makedirs(lesson_a)
+            os.makedirs(lesson_b)
+            os.makedirs(lesson_c)
+            write_json(
+                os.path.join(lesson_a, "progress.json"),
+                {
+                    "lesson_url": "lesson-a",
+                    "status": "failed",
+                    "steps": {"video_download": "failed"},
+                },
+            )
+            write_json(
+                os.path.join(lesson_b, "progress.json"),
+                {
+                    "lesson_url": "lesson-b",
+                    "status": "in_progress",
+                    "steps": {"video_download": "failed"},
+                },
+            )
+            write_json(
+                os.path.join(lesson_c, "progress.json"),
+                {
+                    "lesson_url": "lesson-c",
+                    "status": "completed",
+                    "steps": {"video_download": "completed"},
+                },
+            )
+
+            self.assertEqual(["lesson-a", "lesson-b"], collect_failed_lesson_urls(tmpdir))
 
     def test_process_lesson_contexts_uses_parallel_worker_count(self):
         contexts = [

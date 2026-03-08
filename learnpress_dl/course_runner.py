@@ -110,6 +110,28 @@ def filter_sections_to_lessons(curriculum_sections, lesson_items):
     return filtered
 
 
+def progress_needs_retry(progress):
+    if not progress:
+        return False
+    if progress.get("status") == "failed":
+        return True
+    return any(status == "failed" for status in (progress.get("steps") or {}).values())
+
+
+def collect_failed_lesson_urls(output_dir):
+    failed_urls = []
+    seen_urls = set()
+    for root, _, files in os.walk(output_dir):
+        if "progress.json" not in files:
+            continue
+        progress = load_progress(root)
+        lesson_url = (progress or {}).get("lesson_url")
+        if lesson_url and progress_needs_retry(progress) and lesson_url not in seen_urls:
+            failed_urls.append(lesson_url)
+            seen_urls.add(lesson_url)
+    return sorted(failed_urls)
+
+
 def ensure_state(output_dir, course_title, start_url, resolved_url, mode, sections, lesson_count, require_videos, require_transcripts):
     state = load_course_state(output_dir)
     recovered = {}
@@ -548,7 +570,34 @@ def run_single_course(args, start_url, output_dir=None, progress_ui=None, course
         if not lesson_items:
             raise SystemExit("No lessons were detected for this course")
 
-        if course_args.limit:
+        retry_failed_only = bool(getattr(course_args, "retry_failed", False))
+        if retry_failed_only:
+            failed_urls = collect_failed_lesson_urls(course_args.output_dir)
+            if not failed_urls:
+                log("[retry] No locally failed lessons were found for this course.", level="SUCCESS")
+                if progress_ui:
+                    progress_ui.register_course(effective_course_key, course_title, status="complete")
+                return {
+                    "completed": 0,
+                    "failed": 0,
+                    "total": 0,
+                    "output_dir": course_args.output_dir,
+                }
+            lesson_items = [lesson for lesson in lesson_items if lesson["url"] in set(failed_urls)]
+            if course_args.limit:
+                lesson_items = lesson_items[: course_args.limit]
+            if not lesson_items:
+                log("[retry] Local failed lessons no longer match the remote curriculum.", level="WARNING")
+                if progress_ui:
+                    progress_ui.register_course(effective_course_key, course_title, status="failed")
+                return {
+                    "completed": 0,
+                    "failed": len(failed_urls),
+                    "total": len(failed_urls),
+                    "output_dir": course_args.output_dir,
+                }
+            log(f"[retry] Retrying {len(lesson_items)} locally failed lessons only")
+        elif course_args.limit:
             lesson_items = lesson_items[: course_args.limit]
         planned_curriculum_sections = filter_sections_to_lessons(curriculum_sections, lesson_items)
 
@@ -567,60 +616,64 @@ def run_single_course(args, start_url, output_dir=None, progress_ui=None, course
             require_transcripts=require_transcripts,
         )
         existing_entries = build_existing_entries(course_args.output_dir, lesson_items, recovered)
-        single_check = build_course_check_from_lessons(
-            course_title=course_title,
-            course_url=course_url,
-            continue_url=course_args.start_url,
-            output_dir=course_args.output_dir,
-            remote_lessons=lesson_items,
-            local_lessons_by_url=existing_entries,
-            section_count=len(curriculum_sections),
-            require_videos=require_videos,
-            require_transcripts=require_transcripts,
-            check_mode=course_args.check_mode,
-        )
-        write_course_check(course_args.output_dir, single_check, create_dir=True)
-        single_course_info = {
-            "title": course_title,
-            "url": course_url,
-            "resolved_url": course_url,
-            "continue_url": course_args.start_url,
-            "curriculum_sections": planned_curriculum_sections,
-            "section_count": len(planned_curriculum_sections),
-            "lesson_count": len(lesson_items),
-        }
-        single_course_plan = build_course_plan(
-            single_course_info,
-            {
-                "output_dir": course_args.output_dir,
-                "lessons_by_url": existing_entries,
-            },
-            single_check,
-            require_videos=require_videos,
-            require_transcripts=require_transcripts,
-        )
-        write_course_plan(course_args.output_dir, single_course_plan, create_dir=True)
-        if not (progress_ui and progress_ui.enabled):
-            print_course_check_summary(1, 1, single_check)
-            print_course_plan_summary(single_course_plan)
-        if progress_ui:
-            progress_ui.register_course(effective_course_key, course_title, status=single_course_plan["status"])
-        if single_course_plan["status"] == "complete":
-            log("[download] Nothing to do. This course already satisfies the requested outputs.", level="SUCCESS")
+        if retry_failed_only:
             if progress_ui:
-                progress_ui.set_course_status(effective_course_key, "complete")
-            return {
-                "completed": single_check["local"]["completed_lessons"],
-                "failed": single_check["local"]["failed_lessons"],
-                "total": len(lesson_items),
-                "output_dir": course_args.output_dir,
+                progress_ui.register_course(effective_course_key, course_title, status="running")
+        else:
+            single_check = build_course_check_from_lessons(
+                course_title=course_title,
+                course_url=course_url,
+                continue_url=course_args.start_url,
+                output_dir=course_args.output_dir,
+                remote_lessons=lesson_items,
+                local_lessons_by_url=existing_entries,
+                section_count=len(curriculum_sections),
+                require_videos=require_videos,
+                require_transcripts=require_transcripts,
+                check_mode=course_args.check_mode,
+            )
+            write_course_check(course_args.output_dir, single_check, create_dir=True)
+            single_course_info = {
+                "title": course_title,
+                "url": course_url,
+                "resolved_url": course_url,
+                "continue_url": course_args.start_url,
+                "curriculum_sections": planned_curriculum_sections,
+                "section_count": len(planned_curriculum_sections),
+                "lesson_count": len(lesson_items),
             }
+            single_course_plan = build_course_plan(
+                single_course_info,
+                {
+                    "output_dir": course_args.output_dir,
+                    "lessons_by_url": existing_entries,
+                },
+                single_check,
+                require_videos=require_videos,
+                require_transcripts=require_transcripts,
+            )
+            write_course_plan(course_args.output_dir, single_course_plan, create_dir=True)
+            if not (progress_ui and progress_ui.enabled):
+                print_course_check_summary(1, 1, single_check)
+                print_course_plan_summary(single_course_plan)
+            if progress_ui:
+                progress_ui.register_course(effective_course_key, course_title, status=single_course_plan["status"])
+            if single_course_plan["status"] == "complete":
+                log("[download] Nothing to do. This course already satisfies the requested outputs.", level="SUCCESS")
+                if progress_ui:
+                    progress_ui.set_course_status(effective_course_key, "complete")
+                return {
+                    "completed": single_check["local"]["completed_lessons"],
+                    "failed": single_check["local"]["failed_lessons"],
+                    "total": len(lesson_items),
+                    "output_dir": course_args.output_dir,
+                }
 
         sync_course_tree(
             progress_ui,
             effective_course_key,
             course_title,
-            curriculum_sections,
+            planned_curriculum_sections if retry_failed_only else curriculum_sections,
             lesson_items,
             existing_entries,
             require_videos=require_videos,

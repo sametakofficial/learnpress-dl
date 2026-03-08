@@ -7,10 +7,16 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from learnpress_dl.common import load_cookie_jar
+from learnpress_dl.common import load_cookie_jar, timestamped_archive_base_path
 
 
 class CommonTests(unittest.TestCase):
+    def test_timestamped_archive_base_path_appends_suffix(self):
+        self.assertEqual(
+            "/tmp/course-20260308-090000",
+            timestamped_archive_base_path("/tmp/course", timestamp="20260308-090000"),
+        )
+
     def test_load_cookie_jar_sanitizes_malformed_lines(self):
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
             handle.write("# Netscape HTTP Cookie File\n")

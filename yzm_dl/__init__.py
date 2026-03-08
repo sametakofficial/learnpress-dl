@@ -1,1 +1,1 @@
-"""YapayZekaMaster downloader package."""
+"""Compatibility shim for the old package name."""

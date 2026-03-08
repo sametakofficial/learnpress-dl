@@ -236,11 +236,35 @@ def resolve_base_url(dotenv_path=PROJECT_ENV_PATH):
     return normalize_base_url(value)
 
 
-def build_courses_archive_url(base_url):
+def normalize_courses_page(courses_page):
+    if courses_page is None:
+        return "kurslar/"
+    raw_value = courses_page.strip()
+    if not raw_value:
+        return "kurslar/"
+    if re.match(r"^https?://", raw_value, re.I):
+        return raw_value
+    normalized = raw_value.lstrip("/")
+    if not normalized.endswith("/"):
+        normalized += "/"
+    return normalized
+
+
+def resolve_courses_page(dotenv_path=PROJECT_ENV_PATH):
+    value = os.environ.get("COURSES_PAGE")
+    if value is None:
+        value = read_dotenv(dotenv_path).get("COURSES_PAGE")
+    return normalize_courses_page(value)
+
+
+def build_courses_archive_url(base_url, courses_page=None):
     normalized = normalize_base_url(base_url)
     if not normalized:
         raise RuntimeError("BASE_URL gecersiz veya bos")
-    return urllib.parse.urljoin(normalized.rstrip("/") + "/", "kurslar/")
+    normalized_page = normalize_courses_page(courses_page)
+    if re.match(r"^https?://", normalized_page, re.I):
+        return normalized_page
+    return urllib.parse.urljoin(normalized.rstrip("/") + "/", normalized_page)
 
 
 def derive_download_root(start_url, downloads_dir=None):

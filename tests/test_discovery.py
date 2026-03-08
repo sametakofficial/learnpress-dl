@@ -1,7 +1,8 @@
 import unittest
 
-from yzm_dl.discovery import bootstrap_course, discover_courses
-from yzm_dl.parsers import extract_archive_courses, extract_continue_url
+from learnpress_dl.common import build_courses_archive_url
+from learnpress_dl.discovery import bootstrap_course, discover_courses
+from learnpress_dl.parsers import extract_archive_courses, extract_course_entry_url
 
 
 ARCHIVE_HTML = """
@@ -26,12 +27,6 @@ COURSE_HTML = """
     <title>Course One Title - Example Site</title>
   </head>
   <body>
-    <div class="thim-ekit-single-course__buttons">
-      <a href="https://www.example.com/courses/course-one/lessons/welcome/">
-        <button class="lp-button course-btn-continue">Devam Et</button>
-      </a>
-    </div>
-
     <ul class="curriculum-sections">
       <li class="course-section" data-section-id="10">
         <div class="course-section__title">Intro</div>
@@ -82,8 +77,12 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual("Course Two Title", courses[1]["title"])
         self.assertEqual("https://www.example.com/courses/course-two/", courses[1]["url"])
 
-    def test_extract_continue_url_from_button_wrapped_link(self):
-        continue_url = extract_continue_url(COURSE_HTML, "https://www.example.com/courses/course-one/")
+    def test_build_courses_archive_url_normalizes_relative_path(self):
+        archive_url = build_courses_archive_url("https://www.example.com", courses_page="site/kurslar")
+        self.assertEqual("https://www.example.com/site/kurslar/", archive_url)
+
+    def test_extract_course_entry_url_from_first_course_item_link(self):
+        continue_url = extract_course_entry_url(COURSE_HTML, "https://www.example.com/courses/course-one/")
         self.assertEqual("https://www.example.com/courses/course-one/lessons/welcome/", continue_url)
 
     def test_discover_and_bootstrap_courses(self):
@@ -94,7 +93,7 @@ class DiscoveryTests(unittest.TestCase):
             }
         )
 
-        discovery = discover_courses(downloader, "https://www.example.com")
+        discovery = discover_courses(downloader, "https://www.example.com", courses_page="kurslar/")
         self.assertEqual("https://www.example.com/kurslar/", discovery["archive_url"])
         self.assertEqual(2, len(discovery["courses"]))
 

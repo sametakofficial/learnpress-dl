@@ -5,7 +5,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from yzm_dl.ui import TreeProgressUI
+from learnpress_dl.ui import TreeProgressUI
 
 
 class FakeStream:

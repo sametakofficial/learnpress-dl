@@ -12,7 +12,7 @@ This plan is based on a local project review plus a GitHub CLI comparison agains
 
 ## Main Findings
 
-- the core is already modular, but `yzm_dl/cli.py` still carries too much orchestration
+- the core is already modular, but the top-level CLI orchestration should stay thin
 - single-course and all-courses behavior were drifting; planning/check behavior should stay shared
 - persisted recovery/check/plan files are a strong foundation and should remain first-class
 - parser and retry behavior still need careful hardening over time
@@ -38,25 +38,25 @@ Status: mostly completed.
 
 Target files:
 
-- `yzm_dl/cli.py`
+- `learnpress_dl/cli.py`
 - `README.md`
 
 ## Phase 2 - Orchestration Split
 
-- move high-level course/site execution out of `yzm_dl/cli.py`
+- move high-level course/site execution out of `learnpress_dl/cli.py`
 - create smaller runner modules for:
   - single-course execution
   - site-wide execution
   - plan/check generation
   - UI event wiring
 
-Status: started with `yzm_dl/course_runner.py` and `yzm_dl/site_runner.py`; continue trimming orchestration overlap.
+Status: started with `learnpress_dl/course_runner.py` and `learnpress_dl/site_runner.py`; continue trimming orchestration overlap.
 
 Target direction:
 
-- `yzm_dl/runner.py`
-- `yzm_dl/site_runner.py`
-- `yzm_dl/course_runner.py`
+- `learnpress_dl/runner.py`
+- `learnpress_dl/site_runner.py`
+- `learnpress_dl/course_runner.py`
 
 ## Phase 3 - Reliability and Test Depth
 

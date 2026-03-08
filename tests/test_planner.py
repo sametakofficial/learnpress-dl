@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 
-from yzm_dl.planner import build_course_plan, build_lesson_plan, build_site_plan, compact_course_plan, write_course_plan
+from learnpress_dl.planner import build_course_plan, build_lesson_plan, build_site_plan, compact_course_plan, write_course_plan
 
 
 class PlannerTests(unittest.TestCase):

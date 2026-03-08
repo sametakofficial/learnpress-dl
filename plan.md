@@ -1,11 +1,11 @@
-# Multi-Course Discovery, Check, and Progress UI Plan
+# LearnPress Discovery and Resume Plan
 
 ## Goal
 
-Extend the current single-course downloader into a resilient multi-course system for `yapayzekamaster.com` that:
+Extend the current downloader into a resilient generic LearnPress downloader that:
 
-- discovers all accessible courses from `/kurslar`
-- enters each course page and resolves the `Devam Et` lesson URL
+- discovers all accessible courses from a configurable courses archive page
+- enters each course page and resolves the first lesson URL from `a.course-item__link`
 - reuses the current lesson/course pipeline instead of rewriting it
 - performs a fast inventory/check pass before heavy downloading begins
 - preserves existing downloaded videos, lesson files, and paid transcripts
@@ -23,13 +23,13 @@ Extend the current single-course downloader into a resilient multi-course system
 
 ## Confirmed Inputs and Site Behavior
 
-Current discovery assumptions are based on observed site behavior:
+Current discovery assumptions are based on LearnPress course pages and listing pages:
 
-- base site URL: `https://www.yapayzekamaster.com`
-- course index page: `https://www.yapayzekamaster.com/kurslar/`
-- `/kurslar/` exposes the set of accessible course pages for the authenticated user
-- each course page exposes a `Devam Et` button that links to a lesson URL inside that course
-- the `Devam Et` lesson page can be used as the course start URL for the existing curriculum/lesson pipeline
+- base site URL comes from `BASE_URL`
+- course index path comes from `COURSES_PAGE`
+- the configured courses page exposes the set of accessible course pages for the authenticated user
+- each course page should expose curriculum lesson links as `a.course-item__link`
+- the first `a.course-item__link` lesson page is used as the course start URL for the existing curriculum/lesson pipeline
 
 This means the new multi-course flow can be built as a thin orchestration layer over the current downloader core.
 
@@ -38,7 +38,7 @@ This means the new multi-course flow can be built as a thin orchestration layer 
 The main run should feel like this:
 
 1. load config and cookies
-2. discover accessible courses from `/kurslar`
+2. discover accessible courses from the configured courses page
 3. run a fast check phase across all discovered courses
 4. print a compact inventory of what is already complete vs missing
 5. start download work only for courses/lessons that still need work
@@ -58,10 +58,10 @@ Suggested direction:
 Suggested CLI shape:
 
 ```text
-python3 -m yzm_dl --check
-python3 -m yzm_dl --all-courses
-python3 -m yzm_dl --all-courses --check-only
-python3 -m yzm_dl --url <course-or-lesson-url>
+python3 -m learnpress_dl --check
+python3 -m learnpress_dl --all-courses
+python3 -m learnpress_dl --all-courses --check-only
+python3 -m learnpress_dl --url <course-or-lesson-url>
 ```
 
 Exact flag names can be adjusted to fit current conventions, but the capability split should stay.
@@ -72,8 +72,8 @@ Add orchestration around the current course runner instead of replacing it.
 
 Recommended new layers:
 
-- `site discovery`: discover courses from `/kurslar`
-- `course bootstrap`: fetch a course page and resolve `Devam Et`
+- `site discovery`: discover courses from the configured course archive page
+- `course bootstrap`: fetch a course page and resolve the first `a.course-item__link`
 - `check/inventory`: inspect current local state and compare against remote course metadata
 - `multi-course scheduler`: decide what to skip, check, resume, or download
 - `terminal ui`: render current global state and active lesson statuses
@@ -84,17 +84,17 @@ The existing lesson parsing, media handling, rendering, and state logic should r
 
 ### Step 1: Base URL Resolution
 
-Use `BASE_URL` from env as the root for discovery.
+Use `BASE_URL` and `COURSES_PAGE` from env as the root for discovery.
 
 Rules:
 
 - normalize trailing slash handling
-- derive `/kurslar/` from `BASE_URL`
+- derive the archive URL from `BASE_URL` + `COURSES_PAGE`
 - fail clearly if `BASE_URL` is missing in multi-course mode
 
 ### Step 2: Course Listing Discovery
 
-Fetch `/kurslar/` with the authenticated session and parse all unique course links.
+Fetch the configured courses page with the authenticated session and parse all unique course links.
 
 For each course listing entry, capture:
 
@@ -109,12 +109,12 @@ Suggested file:
 
 - `downloads/site-inventory.json`
 
-### Step 3: Course Bootstrap via `Devam Et`
+### Step 3: Course Bootstrap via the first `course-item__link`
 
 For each discovered course page:
 
 1. fetch course page
-2. parse the `Devam Et` button
+2. parse the first `a.course-item__link`
 3. extract the lesson URL
 4. use that lesson URL as the effective course start URL
 
@@ -126,7 +126,7 @@ Also capture lightweight course metadata from the page when available:
 - page URL
 - continue URL
 
-If `Devam Et` is missing but the course page is accessible, mark the course as `bootstrap_failed` and continue with the next course.
+If no `a.course-item__link` is found but the course page is accessible, mark the course as `bootstrap_failed` and continue with the next course.
 
 ## New Check Phase
 
@@ -383,7 +383,7 @@ Rules:
 
 1. add config support for `BASE_URL` and multi-course mode selection
 2. implement `/kurslar` course discovery parser
-3. implement course bootstrap parsing for `Devam Et`
+3. implement course bootstrap parsing for the first `course-item__link`
 4. add site-level state and inventory persistence
 5. implement fast check/inventory phase
 6. wire course-level decisions into the existing resumable pipeline
@@ -398,7 +398,7 @@ Add tests for the new behavior without requiring full downloads.
 Suggested test coverage:
 
 - parse course links from a saved `/kurslar` HTML fixture
-- parse `Devam Et` link from a saved course page fixture
+- parse the first `course-item__link` from a saved course page fixture
 - map discovered course URLs to deterministic local folders
 - compare remote/local lesson inventories accurately
 - preserve completed transcript/video steps during check
@@ -410,7 +410,7 @@ Suggested test coverage:
 After this phase:
 
 - the downloader can discover all accessible courses automatically
-- each course can bootstrap from its `Devam Et` lesson URL
+- each course can bootstrap from its first curriculum lesson URL
 - a fast check phase reports what is new, missing, partial, and complete
 - download work resumes only where needed
 - existing paid transcripts and downloaded videos remain untouched

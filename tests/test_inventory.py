@@ -3,7 +3,7 @@ import os
 import tempfile
 import unittest
 
-from yzm_dl.inventory import (
+from learnpress_dl.inventory import (
     build_bootstrap_failed_check,
     build_course_check,
     compact_course_check,

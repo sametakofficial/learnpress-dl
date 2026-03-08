@@ -1,14 +1,14 @@
 from .common import build_courses_archive_url, is_retryable_error, retry_call
 from .parsers import (
     extract_archive_courses,
-    extract_continue_url,
+    extract_course_entry_url,
     extract_course_title,
     extract_curriculum_sections,
 )
 
 
-def discover_courses(downloader, base_url, retries=3, retry_delay=2.0):
-    archive_url = build_courses_archive_url(base_url)
+def discover_courses(downloader, base_url, courses_page=None, retries=3, retry_delay=2.0):
+    archive_url = build_courses_archive_url(base_url, courses_page=courses_page)
     html_text, final_url = retry_call(
         lambda: downloader.request_text(archive_url),
         retries=max(1, retries),
@@ -30,7 +30,7 @@ def bootstrap_course(downloader, course, retries=3, retry_delay=2.0):
         should_retry=is_retryable_error,
     )
     curriculum_sections = extract_curriculum_sections(html_text, final_url)
-    continue_url = extract_continue_url(html_text, final_url)
+    continue_url = extract_course_entry_url(html_text, final_url)
     return {
         "title": (course.get("title") if isinstance(course, dict) else "") or extract_course_title(html_text),
         "url": course_url,

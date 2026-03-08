@@ -84,72 +84,23 @@ class CourseArchiveParser(HTMLParser):
         self.current_text_parts = []
 
 
-class ContinueLearningParser(HTMLParser):
+class CourseEntryLinkParser(HTMLParser):
     def __init__(self, page_url):
         super().__init__(convert_charrefs=True)
         self.page_url = page_url
-        self.current_anchor = None
-        self.current_anchor_text_parts = []
-        self.current_button_text_parts = []
-        self.current_button_classes = set()
-        self.current_button_seen_classes = set()
-        self.continue_url = None
+        self.entry_url = None
 
     def handle_starttag(self, tag, attrs):
+        if tag != "a" or self.entry_url:
+            return
         attrs_dict = attr_map(attrs)
         classes = class_list(attrs)
-
-        if tag == "a":
-            href = attrs_dict.get("href")
-            self.current_anchor = {
-                "href": normalize_page_url(urllib.parse.urljoin(self.page_url, html.unescape(href))) if href else None,
-                "classes": classes,
-            }
-            self.current_anchor_text_parts = []
-            self.current_button_text_parts = []
-            self.current_button_classes = set()
-            self.current_button_seen_classes = set()
+        href = attrs_dict.get("href")
+        if not href or "course-item__link" not in classes:
             return
-
-        if tag == "button" and self.current_anchor is not None:
-            self.current_button_classes = classes
-            self.current_button_seen_classes.update(classes)
-
-    def handle_data(self, data):
-        if self.current_anchor is None:
-            return
-        self.current_anchor_text_parts.append(data)
-        if self.current_button_classes:
-            self.current_button_text_parts.append(data)
-
-    def handle_endtag(self, tag):
-        if tag == "button":
-            self.current_button_classes = set()
-            return
-
-        if tag != "a" or self.current_anchor is None:
-            return
-
-        href = self.current_anchor.get("href")
-        anchor_text = " ".join("".join(self.current_anchor_text_parts).split())
-        button_text = " ".join("".join(self.current_button_text_parts).split())
-        button_classes = self.current_button_seen_classes
-        looks_like_continue = (
-            (href and is_lesson_url(href))
-            and (
-                "course-btn-continue" in button_classes
-                or button_text.casefold() == "devam et"
-                or anchor_text.casefold() == "devam et"
-            )
-        )
-        if looks_like_continue and not self.continue_url:
-            self.continue_url = href
-
-        self.current_anchor = None
-        self.current_anchor_text_parts = []
-        self.current_button_text_parts = []
-        self.current_button_classes = set()
-        self.current_button_seen_classes = set()
+        absolute_url = normalize_page_url(urllib.parse.urljoin(self.page_url, html.unescape(href)))
+        if is_lesson_url(absolute_url):
+            self.entry_url = absolute_url
 
 
 def extract_archive_courses(html_text, page_url):
@@ -175,11 +126,11 @@ def extract_archive_courses(html_text, page_url):
     return [courses_by_url[url] for url in ordered_urls]
 
 
-def extract_continue_url(html_text, page_url):
-    parser = ContinueLearningParser(page_url)
+def extract_course_entry_url(html_text, page_url):
+    parser = CourseEntryLinkParser(page_url)
     parser.feed(html_text)
     parser.close()
-    return parser.continue_url
+    return parser.entry_url
 
 
 def extract_curriculum_sections(html_text, page_url):

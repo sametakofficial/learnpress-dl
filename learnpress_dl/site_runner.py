@@ -62,7 +62,7 @@ def should_use_tree_progress(args):
     return not args.check and not args.discover_only and sys.stdout.isatty()
 
 
-def run_all_courses(args, parser, base_url):
+def run_all_courses(args, parser, base_url, courses_page):
     if not base_url:
         parser.error("Tum kurs modu icin --base-url veya .env icinde BASE_URL gerekli")
 
@@ -77,6 +77,7 @@ def run_all_courses(args, parser, base_url):
         discovery = discover_courses(
             downloader,
             base_url,
+            courses_page=courses_page,
             retries=max(1, args.retry_count),
             retry_delay=max(args.retry_delay, 0.1),
         )
@@ -114,7 +115,7 @@ def run_all_courses(args, parser, base_url):
                 print_course_bootstrap_summary(index, len(courses), course_info)
 
             if not course_info.get("continue_url"):
-                log(f"[{index}/{len(courses)}] Devam Et linki bulunamadi, atlandi: {course_info.get('title') or course_info['url']}", level="WARN")
+                log(f"[{index}/{len(courses)}] Ilk course-item__link bulunamadi, atlandi: {course_info.get('title') or course_info['url']}", level="WARN")
                 tree_ui.set_course_status(course_key, "failed")
                 check_results.append(build_bootstrap_failed_check(course_info))
                 course_infos_for_plan.append(course_info)

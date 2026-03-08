@@ -1,11 +1,11 @@
-# yapayzekamaster-dl
+# learnpress-dl
 
-Cookie-authenticated downloader for `yapayzekamaster.com` LearnPress courses.
+Cookie-authenticated downloader for LearnPress-based course sites.
 
 It supports:
 
 - single-course runs
-- all-courses discovery from `/kurslar/`
+- site-wide course discovery from a configurable courses page
 - recovery from old partial downloads
 - lightweight `check` mode before downloading
 - persisted `check` and `plan` files
@@ -26,30 +26,44 @@ Supported variables:
 
 - `BASE_URL`
   - required for site-wide discovery mode
-  - example: `https://www.yapayzekamaster.com`
+  - example: `https://www.example.com`
+- `COURSES_PAGE`
+  - relative or absolute courses archive path used for discovery
+  - examples:
+    - `kurslar/`
+    - `site/kurslar/`
+    - `proje/kurslar`
+    - `/kurslar/`
 - `GROQ_API_KEY`
   - only required when using `--download-transcripts`
-  - not used in plain `check` mode or plain content-only runs
 
 Example `.env`:
 
 ```env
 BASE_URL=https://www.yapayzekamaster.com
+COURSES_PAGE=kurslar/
 GROQ_API_KEY=your_groq_key_here
 ```
 
-## Main Entry Points
+## Entry Points
 
 Preferred:
 
 ```bash
-python3 -m yzm_dl --help
+python3 -m learnpress_dl --help
 ```
 
-Compatibility wrapper:
+Convenience wrapper:
+
+```bash
+python3 learnpress_dl.py --help
+```
+
+Legacy compatibility wrapper:
 
 ```bash
 python3 learnpress_course_downloader.py --help
+python3 -m yzm_dl --help
 ```
 
 ## Authentication
@@ -59,128 +73,109 @@ Use one of these:
 - `--cookie-file /path/to/cookies.txt`
 - `--cookie-header 'cookie_name=value; ...'`
 
-The tool requires one of them for all real runs.
-
 ## Common Usage
 
-### 1. Check a single course without downloading
+### Check a single course without downloading
 
 ```bash
-python3 -m yzm_dl \
+python3 -m learnpress_dl \
   --cookie-file "/path/to/cookies.txt" \
   --check \
-  "https://www.yapayzekamaster.com/courses/.../lessons/.../"
+  "https://www.example.com/courses/.../lessons/.../"
 ```
 
-This:
-
-- reads the course curriculum
-- recovers old local state if present
-- writes `course-check.json`
-- writes `course-plan.json`
-- does not download anything
-
-### 2. Resume a single course
+### Resume a single course
 
 ```bash
-python3 -m yzm_dl \
+python3 -m learnpress_dl \
   --cookie-file "/path/to/cookies.txt" \
-  "https://www.yapayzekamaster.com/courses/.../lessons/.../"
+  "https://www.example.com/courses/.../lessons/.../"
 ```
 
-If the course output directory already exists, the run resumes from local state.
-
-### 3. Check all courses from `/kurslar/`
+### Check all courses from the configured courses page
 
 ```bash
-python3 -m yzm_dl \
+python3 -m learnpress_dl \
   --cookie-file "/path/to/cookies.txt" \
   --all-courses \
   --check
 ```
 
-This uses `BASE_URL` from `.env` unless `--base-url` is provided.
-
-Outputs:
-
-- `downloads/site-check.json`
-- `downloads/site-plan.json`
-- `<course>/course-check.json` for existing local course dirs
-- `<course>/course-plan.json` for existing local course dirs
-
-### 4. Discover all courses only
+### Override the courses page path
 
 ```bash
-python3 -m yzm_dl \
+python3 -m learnpress_dl \
+  --cookie-file "/path/to/cookies.txt" \
+  --base-url "https://example.com" \
+  --courses-page "site/kurslar/" \
+  --all-courses \
+  --check
+```
+
+### Discover all courses only
+
+```bash
+python3 -m learnpress_dl \
   --cookie-file "/path/to/cookies.txt" \
   --all-courses \
   --discover-only
 ```
 
-This prints discovered courses and their `Devam Et` bootstrap links.
-
-### 5. Resume all courses
+### Resume all courses
 
 ```bash
-python3 -m yzm_dl \
+python3 -m learnpress_dl \
   --cookie-file "/path/to/cookies.txt" \
   --all-courses
 ```
 
 This flow:
 
-1. discovers courses from `/kurslar/`
-2. resolves each course's `Devam Et` lesson URL
-3. checks local state
-4. generates course/site plans
-5. skips completed courses
-6. resumes only actionable courses
+1. discovers courses from `BASE_URL + COURSES_PAGE`
+2. opens each course page
+3. resolves the first lesson link from the first `a.course-item__link`
+4. checks local state
+5. generates course/site plans
+6. skips completed courses
+7. resumes only actionable courses
 
-### 6. Download videos too
+### Download videos too
 
 ```bash
-python3 -m yzm_dl \
+python3 -m learnpress_dl \
   --cookie-file "/path/to/cookies.txt" \
   --all-courses \
   --download-videos
 ```
 
-### 7. Download transcripts too
+### Download transcripts too
 
 ```bash
-python3 -m yzm_dl \
+python3 -m learnpress_dl \
   --cookie-file "/path/to/cookies.txt" \
   --all-courses \
   --download-videos \
   --download-transcripts
 ```
 
-Notes:
-
-- transcripts are only attempted when `--download-transcripts` is set
-- `GROQ_API_KEY` must exist for transcript runs
-- existing transcript files are preserved and reused by the planner/check logic
-
 ## Important Flags
 
 - `--check`
   - inspect and plan only, no download
 - `--all-courses`
-  - run site-wide mode using `/kurslar/`
+  - run site-wide mode using `BASE_URL` and `COURSES_PAGE`
 - `--discover-only`
   - discovery/bootstrap only, no planning/download
 - `--base-url`
   - override `BASE_URL`
+- `--courses-page`
+  - override `COURSES_PAGE`
 - `--download-videos`
   - download embedded videos for media lessons
 - `--download-transcripts`
   - generate transcripts for downloaded videos
 - `--tree-progress` / `--no-tree-progress`
   - enable or disable the live tree UI for multi-course download runs
-- `--limit N`
-  - limit lessons in single-course runs
-- `--mode auto|curriculum|next`
-  - lesson traversal strategy
 
 ## Recovery and Resume Behavior
 
@@ -199,8 +194,6 @@ The site-wide flow also writes:
 - `downloads/site-check.json`
 - `downloads/site-plan.json`
 
-Old partial downloads are recovered by scanning existing lesson folders and manifests.
-
 Current behavior:
 
 - completed lessons are skipped
@@ -208,9 +201,17 @@ Current behavior:
 - failed lessons are planned for retry
 - transcript files are not regenerated unless the lesson still needs transcript work
 
-## Output Layout
+## Bootstrap Behavior
 
-Typical structure:
+Course bootstrap no longer uses any site-specific `Devam Et` button logic.
+
+The downloader now treats the course entry lesson as:
+
+- the first lesson URL found in the first `a.course-item__link` on the course page
+
+This keeps the downloader generic for LearnPress sites instead of relying on custom theme buttons.
+
+## Output Layout
 
 ```text
 downloads/
@@ -233,41 +234,19 @@ downloads/
         video-01-....transcript.json
 ```
 
-## Current Planning Model
-
-`course-plan.json` contains lesson actions such as:
-
-- `skip_complete`
-- `new_lesson`
-- `retry_failed`
-- `fetch_content`
-- `download_needed`
-- `transcribe_only`
-- `repair_metadata`
-
-Course-level statuses currently include:
-
-- `complete`
-- `resume_needed`
-- `recovery_needed`
-- `new`
-- `bootstrap_failed`
-
 ## Troubleshooting
 
 - `Database Error` / `HTTP 500`
-  - this is usually site-side instability; rerun later and resume from state
+  - usually site-side instability; rerun later and resume from state
 - no courses found in `--all-courses`
-  - check cookies and membership access
+  - check cookies, `BASE_URL`, and `COURSES_PAGE`
 - transcript failure
   - verify `GROQ_API_KEY`
-  - verify the video file actually exists
 - no tree UI visible
   - tree UI is mainly for interactive TTY download runs
-  - `--check` and non-interactive runs use summary output instead
 
 ## Current Status
 
-The project is functional and already supports recovery/check/planning, but it is still under active refactoring.
+The project is now positioned as a generic LearnPress downloader, not a site-specific downloader.
 
 See `refactoring-plan.md` for the next cleanup phases.

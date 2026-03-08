@@ -98,6 +98,18 @@ def build_section_rows(curriculum_sections):
     ]
 
 
+def filter_sections_to_lessons(curriculum_sections, lesson_items):
+    allowed_urls = {lesson["url"] for lesson in lesson_items}
+    filtered = []
+    for section in curriculum_sections:
+        lessons = [lesson for lesson in section.get("lessons", []) if lesson.get("url") in allowed_urls]
+        if lessons:
+            section_copy = dict(section)
+            section_copy["lessons"] = lessons
+            filtered.append(section_copy)
+    return filtered
+
+
 def ensure_state(output_dir, course_title, start_url, resolved_url, mode, sections, lesson_count, require_videos, require_transcripts):
     state = load_course_state(output_dir)
     recovered = {}
@@ -193,7 +205,7 @@ def discover_lessons(
             classification_counts[classification if classification in classification_counts else "unknown"] += 1
             if progress_ui and course_key:
                 progress_ui.set_lesson_status(course_key, lesson["url"], "finished", title=lesson.get("title"), section_title=lesson.get("section_title"))
-            log(f"[{index}/{total}] Geciliyor: {lesson.get('title') or lesson['url']}", level="OK")
+            log(f"[check] {index}/{total} skipping satisfied lesson: {lesson.get('title') or lesson['url']}", level="SUCCESS")
             continue
 
         title_hint = lesson.get("title") or f"lesson-{index:03d}"
@@ -205,7 +217,7 @@ def discover_lessons(
             progress_ui.set_lesson_status(course_key, lesson["url"], "fetching-content", title=lesson.get("title"), section_title=lesson.get("section_title"))
 
         target_url = lesson["url"]
-        log(f"[{index}/{total}] Kesif icin ders aliniyor: {lesson.get('title') or target_url}")
+        log(f"[discover] {index}/{total} fetching lesson metadata: {lesson.get('title') or target_url}", level="DEBUG")
         try:
             if target_url == first_url:
                 html_text = first_html
@@ -218,8 +230,8 @@ def discover_lessons(
                     base_delay=max(args.retry_delay, 0.1),
                     should_retry=is_retryable_error,
                     on_retry=lambda attempt, retry_total, exc, delay: log(
-                        f"[{index}/{total}] Sayfa retry {attempt}/{retry_total}: {exc} ({delay:.1f}s)",
-                        level="WARN",
+                        f"[http] lesson retry {attempt}/{retry_total} for {target_url}: {exc} ({delay:.1f}s)",
+                        level="WARNING",
                     ),
                 )
                 page_parser = parse_page(final_url, html_text)
@@ -230,7 +242,7 @@ def discover_lessons(
             progress_by_url[lesson["url"]] = progress
             if progress_ui and course_key:
                 progress_ui.set_lesson_status(course_key, lesson["url"], "failed", title=lesson.get("title"), section_title=lesson.get("section_title"))
-            log(f"[{index}/{total}] Sayfa hatasi: {exc}", level="WARN")
+            log(f"[discover] {index}/{total} failed to fetch lesson page: {exc}", level="WARNING")
             continue
 
         problem = detect_access_problem(html_text, page_parser)
@@ -241,7 +253,7 @@ def discover_lessons(
             progress_by_url[lesson["url"]] = progress
             if progress_ui and course_key:
                 progress_ui.set_lesson_status(course_key, lesson["url"], "failed", title=lesson.get("title"), section_title=lesson.get("section_title"))
-            log(f"[{index}/{total}] Atlandi: {problem}", level="WARN")
+            log(f"[discover] {index}/{total} skipped lesson due to access problem: {problem}", level="WARNING")
             continue
 
         classification = classify_from_parser(page_parser)
@@ -298,20 +310,20 @@ def process_lesson_context(context, args, groq_api_key, require_videos, require_
             retries=max(1, args.retry_count),
             base_delay=max(args.retry_delay, 0.1),
             should_retry=is_retryable_error,
-            on_retry=lambda attempt, retry_total, exc, delay: log(
-                f"[{context['index']}/{context['total']}] Materyal retry {attempt}/{retry_total}: {exc} ({delay:.1f}s)",
-                level="WARN",
+                    on_retry=lambda attempt, retry_total, exc, delay: log(
+                f"[http] materials retry {attempt}/{retry_total} for {context['final_url']}: {exc} ({delay:.1f}s)",
+                level="WARNING",
             ),
         )
     except RuntimeError as exc:
-        log(f"[{context['index']}/{context['total']}] Materyal istegi basarisiz: {exc}", level="WARN")
+        log(f"[materials] failed to fetch lesson materials: {exc}", level="WARNING")
         materials = {"html": "", "links": []}
     set_step(progress, "materials_fetch", "completed")
     save_progress(lesson_dir, progress)
 
     video_files = []
     if require_videos and is_media_classification(classification):
-        log(f"[{context['index']}/{context['total']}] {len(page_parser.iframes)} video kaynagi bulundu")
+        log(f"[media] {context['index']}/{context['total']} found {len(page_parser.iframes)} video source(s)")
         try:
             if progress_ui and course_key:
                 progress_ui.set_lesson_status(course_key, lesson["url"], "fetching-video", title=context["lesson_title"], section_title=lesson.get("section_title"))
@@ -325,12 +337,12 @@ def process_lesson_context(context, args, groq_api_key, require_videos, require_
                 retry_delay=max(args.retry_delay, 0.1),
             )
             set_step(progress, "video_download", "completed")
-            log(f"[{context['index']}/{context['total']}] {len(video_files)} video indirildi", level="OK")
+            log(f"[media] downloaded {len(video_files)} video file(s)", level="SUCCESS")
         except RuntimeError as exc:
             set_step(progress, "video_download", "failed", error=str(exc))
             set_status(progress, "failed", error=str(exc))
             save_progress(lesson_dir, progress)
-            log(f"[{context['index']}/{context['total']}] Video indirme basarisiz: {exc}", level="WARN")
+            log(f"[media] video download failed: {exc}", level="WARNING")
     else:
         step_status = "skipped" if not is_media_classification(classification) or not require_videos else "pending"
         set_step(progress, "video_download", step_status)
@@ -341,7 +353,7 @@ def process_lesson_context(context, args, groq_api_key, require_videos, require_
         transcript_errors = []
         for video_index, video in enumerate(video_files, start=1):
             video_path = os.path.join(lesson_dir, video["file"])
-            log(f"[{context['index']}/{context['total']}] Video {video_index}/{len(video_files)} transcript aliniyor")
+            log(f"[transcript] processing video {video_index}/{len(video_files)}: {video['file']}")
             try:
                 if progress_ui and course_key:
                     progress_ui.set_lesson_status(course_key, lesson["url"], "transcription", title=context["lesson_title"], section_title=lesson.get("section_title"))
@@ -355,15 +367,15 @@ def process_lesson_context(context, args, groq_api_key, require_videos, require_
                 )
                 video["transcript"] = transcript
                 log(
-                    f"[{context['index']}/{context['total']}] Video {video_index}/{len(video_files)} transcript hazir",
-                    level="OK",
+                    f"[transcript] transcript ready for video {video_index}/{len(video_files)}",
+                    level="SUCCESS",
                 )
             except RuntimeError as exc:
                 video["transcript_error"] = str(exc)
                 transcript_errors.append(str(exc))
                 log(
-                    f"[{context['index']}/{context['total']}] Video {video_index}/{len(video_files)} transcript basarisiz: {exc}",
-                    level="WARN",
+                    f"[transcript] transcript failed for video {video_index}/{len(video_files)}: {exc}",
+                    level="WARNING",
                 )
 
         if transcript_errors:
@@ -418,12 +430,12 @@ def finalize_manifest_and_state(args, manifest, saved_by_url, progress_by_url, s
     if emit_summary:
         first_meta = manifest["lessons"][0] if manifest["lessons"] else None
         summary_lines = [
-            f"Ders sayisi: {len(manifest['lessons'])}",
-            f"Cikti klasoru: {os.path.abspath(args.output_dir)}",
+            f"Lesson count: {len(manifest['lessons'])}",
+            f"Output directory: {os.path.abspath(args.output_dir)}",
             f"Manifest: {os.path.abspath(os.path.join(args.output_dir, 'manifest.json'))}",
         ]
         if first_meta:
-            summary_lines.append("Ilk ders: " + os.path.abspath(os.path.join(args.output_dir, first_meta["directories"]["lesson"])))
+            summary_lines.append("First lesson: " + os.path.abspath(os.path.join(args.output_dir, first_meta["directories"]["lesson"])))
         print("\n" + "\n".join(summary_lines), flush=True)
 
 
@@ -441,18 +453,18 @@ def run_single_course(args, start_url, output_dir=None, progress_ui=None, course
         if require_transcripts:
             groq_api_key = resolve_groq_api_key(course_args.dotenv_path)
             if not groq_api_key:
-                raise SystemExit(f"GROQ_API_KEY bulunamadi. Proje env dosyasini kontrol et: {course_args.dotenv_path}")
+                raise SystemExit(f"GROQ_API_KEY was not found. Check your env file: {course_args.dotenv_path}")
 
         downloader = build_downloader_from_args(course_args)
-        log(f"Ilk sayfa aliniyor: {course_args.start_url}")
+        log(f"[discover] Fetching initial page: {course_args.start_url}")
         first_html, first_final_url = retry_call(
             lambda: downloader.request_text(course_args.start_url),
             retries=max(1, course_args.retry_count),
             base_delay=max(course_args.retry_delay, 0.1),
             should_retry=is_retryable_error,
             on_retry=lambda attempt, retry_total, exc, delay: log(
-                f"Ilk sayfa retry {attempt}/{retry_total}: {exc} ({delay:.1f}s)",
-                level="WARN",
+                f"[http] initial page retry {attempt}/{retry_total}: {exc} ({delay:.1f}s)",
+                level="WARNING",
             ),
         )
         first_parser = parse_page(first_final_url, first_html)
@@ -479,12 +491,13 @@ def run_single_course(args, start_url, output_dir=None, progress_ui=None, course
             ]
 
         if not lesson_items:
-            raise SystemExit("Ders listesi tespit edilemedi.")
+            raise SystemExit("No lessons were detected for this course")
 
         if course_args.limit:
             lesson_items = lesson_items[: course_args.limit]
+        planned_curriculum_sections = filter_sections_to_lessons(curriculum_sections, lesson_items)
 
-        log(f"Toplam {len(lesson_items)} ders bulundu")
+        log(f"[discover] Found {len(lesson_items)} lessons for this course")
 
         section_rows = build_section_rows(curriculum_sections)
         state, recovered = ensure_state(
@@ -517,8 +530,8 @@ def run_single_course(args, start_url, output_dir=None, progress_ui=None, course
             "url": course_url,
             "resolved_url": course_url,
             "continue_url": course_args.start_url,
-            "curriculum_sections": curriculum_sections,
-            "section_count": len(curriculum_sections),
+            "curriculum_sections": planned_curriculum_sections,
+            "section_count": len(planned_curriculum_sections),
             "lesson_count": len(lesson_items),
         }
         single_course_plan = build_course_plan(
@@ -538,7 +551,7 @@ def run_single_course(args, start_url, output_dir=None, progress_ui=None, course
         if progress_ui:
             progress_ui.register_course(effective_course_key, course_title, status=single_course_plan["status"])
         if single_course_plan["status"] == "complete":
-            log("Indirilecek eksik ders bulunamadi. Bu kurs tamam gorunuyor.", level="OK")
+            log("[download] Nothing to do. This course already satisfies the requested outputs.", level="SUCCESS")
             if progress_ui:
                 progress_ui.set_course_status(effective_course_key, "complete")
             return {"completed": single_check["local"]["completed_lessons"], "failed": single_check["local"]["failed_lessons"], "total": len(lesson_items)}
@@ -597,7 +610,7 @@ def run_single_course(args, start_url, output_dir=None, progress_ui=None, course
                         saved, progress = future.result()
                         saved_by_url[context["lesson"]["url"]] = saved
                         progress_by_url[context["lesson"]["url"]] = progress
-                        log(f"[{context['index']}/{context['total']}] Kaydedildi: {saved['title']}", level="OK")
+                        log(f"[download] saved lesson {context['index']}/{context['total']}: {saved['title']}", level="SUCCESS")
                     except RuntimeError as exc:
                         progress = context["progress"]
                         set_status(progress, "failed", error=str(exc))
@@ -605,7 +618,7 @@ def run_single_course(args, start_url, output_dir=None, progress_ui=None, course
                         progress_by_url[context["lesson"]["url"]] = progress
                         if progress_ui and effective_course_key:
                             progress_ui.set_lesson_status(effective_course_key, context["lesson"]["url"], "failed", title=context["lesson_title"], section_title=context["lesson"].get("section_title"))
-                        log(f"[{context['index']}/{context['total']}] Text isleme hatasi: {exc}", level="WARN")
+                        log(f"[download] text lesson failed {context['index']}/{context['total']}: {exc}", level="WARNING")
 
         for queue in (media_contexts, other_contexts):
             for context in queue:
@@ -621,7 +634,7 @@ def run_single_course(args, start_url, output_dir=None, progress_ui=None, course
                     )
                     saved_by_url[context["lesson"]["url"]] = saved
                     progress_by_url[context["lesson"]["url"]] = progress
-                    log(f"[{context['index']}/{context['total']}] Kaydedildi: {saved['title']}", level="OK")
+                    log(f"[download] saved lesson {context['index']}/{context['total']}: {saved['title']}", level="SUCCESS")
                 except RuntimeError as exc:
                     progress = context["progress"]
                     set_status(progress, "failed", error=str(exc))
@@ -629,7 +642,7 @@ def run_single_course(args, start_url, output_dir=None, progress_ui=None, course
                     progress_by_url[context["lesson"]["url"]] = progress
                     if progress_ui and effective_course_key:
                         progress_ui.set_lesson_status(effective_course_key, context["lesson"]["url"], "failed", title=context["lesson_title"], section_title=context["lesson"].get("section_title"))
-                    log(f"[{context['index']}/{context['total']}] Isleme hatasi: {exc}", level="WARN")
+                    log(f"[download] lesson failed {context['index']}/{context['total']}: {exc}", level="WARNING")
 
         finalize_manifest_and_state(
             course_args,

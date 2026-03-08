@@ -94,7 +94,7 @@ class TreeProgressUI:
 
         for lesson in lessons:
             lesson_url = lesson["url"]
-            section_title = lesson.get("section_title") or (section_titles[0] if section_titles else "Diger")
+            section_title = lesson.get("section_title") or (section_titles[0] if section_titles else "Other")
             if section_title not in course["sections"]:
                 course["sections"][section_title] = {"title": section_title, "lesson_urls": []}
                 course["section_order"].append(section_title)
@@ -129,7 +129,7 @@ class TreeProgressUI:
                 return
             lesson = course["lessons"].get(lesson_url)
             if not lesson:
-                normalized_section = section_title or "Diger"
+                normalized_section = section_title or "Other"
                 if normalized_section not in course["sections"]:
                     course["sections"][normalized_section] = {"title": normalized_section, "lesson_urls": []}
                     course["section_order"].append(normalized_section)
@@ -184,7 +184,7 @@ class TreeProgressUI:
                     active_lessons += 1
 
         line1 = truncate_text(
-            f"YZM DL Tree | running={counts['running']} checking={counts['checking']} partial={counts['partial']} new={counts['new']} complete={counts['complete']}",
+            f"LearnPress DL | running={counts['running']} checking={counts['checking']} partial={counts['partial']} new={counts['new']} complete={counts['complete']}",
             width,
         )
         line2 = truncate_text(f"Active lessons={active_lessons}", width)

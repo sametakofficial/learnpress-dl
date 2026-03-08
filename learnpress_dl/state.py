@@ -67,7 +67,7 @@ def acquire_course_lock(output_dir, start_url):
             return lock_path
         if process_exists(existing_pid):
             raise RuntimeError(
-                f"Bu cikti klasoru baska bir islem tarafindan kullaniliyor (pid={existing_pid})"
+                f"This output directory is already in use by another process (pid={existing_pid})"
             )
 
     write_json(

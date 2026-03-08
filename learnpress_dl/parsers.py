@@ -451,7 +451,7 @@ def detect_access_problem(html_text, parser):
         return None
     if "This content is protected" in html_text:
         return (
-            "Sayfa korumali gorunuyor. Cookie gecersiz olabilir ya da kursa erisim yok. "
-            "Tarayicidan guncel cookie ile tekrar dene."
+            "The page appears to be protected. Your cookies may be invalid or the account may not have access to this course. "
+            "Try again with fresh browser cookies."
         )
-    return "Ders icerigi bulunamadi. HTML yapisi degismis olabilir."
+    return "Lesson content was not found. The page structure may have changed."

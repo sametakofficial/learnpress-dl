@@ -141,7 +141,7 @@ def match_local_course(index, course_info):
 def _expected_lesson_dir(output_dir, lesson):
     if not output_dir:
         return None
-    section_title = lesson.get("section_title") or "Diger"
+    section_title = lesson.get("section_title") or "Other"
     lesson_title = lesson.get("title") or "lesson"
     section_dir = os.path.join(output_dir, ordered_slug(lesson.get("section_index") or 1, section_title, "section"))
     return os.path.join(section_dir, ordered_slug(lesson.get("lesson_in_section") or 1, lesson_title, "lesson"))

@@ -77,13 +77,13 @@ def fetch_dailymotion_stream(downloader, video_id, page_url, retries=3, retry_de
         base_delay=retry_delay,
         should_retry=is_retryable_error,
         on_retry=lambda attempt, total, exc, delay: log(
-            f"Dailymotion metadata retry {attempt}/{total}: {exc} ({delay:.1f}s)",
-            level="WARN",
+            f"[media] Dailymotion metadata retry {attempt}/{total}: {exc} ({delay:.1f}s)",
+            level="WARNING",
         ),
     )
     stream_url = pick_dailymotion_hls(metadata)
     if not stream_url:
-        raise RuntimeError(f"Dailymotion stream bulunamadi: {video_id}")
+        raise RuntimeError(f"Dailymotion stream was not found for {video_id}")
     return {
         "provider": "dailymotion",
         "video_id": video_id,
@@ -120,7 +120,7 @@ def download_hls_video(stream_url, output_path, page_url, timeout_seconds):
 def download_with_ytdlp(iframe_src, output_path, page_url, timeout_seconds):
     tool = shutil.which("yt-dlp")
     if not tool:
-        raise RuntimeError("yt-dlp kurulu degil")
+        raise RuntimeError("yt-dlp is not installed")
     command = [tool, "--referer", page_url, "--no-playlist", "-o", output_path, iframe_src]
     run_command(command, timeout=timeout_seconds)
 
@@ -152,8 +152,8 @@ def download_videos_for_lesson(downloader, lesson_dir, page_url, parser, timeout
                     base_delay=retry_delay,
                     should_retry=is_retryable_error,
                     on_retry=lambda attempt, total, exc, delay: log(
-                        f"Video indirme retry {attempt}/{total}: {exc} ({delay:.1f}s)",
-                        level="WARN",
+                        f"[media] video download retry {attempt}/{total}: {exc} ({delay:.1f}s)",
+                        level="WARNING",
                     ),
                 )
             downloaded.append(
@@ -176,13 +176,13 @@ def download_videos_for_lesson(downloader, lesson_dir, page_url, parser, timeout
                 base_delay=retry_delay,
                 should_retry=is_retryable_error,
                 on_retry=lambda attempt, total, exc, delay: log(
-                    f"yt-dlp retry {attempt}/{total}: {exc} ({delay:.1f}s)",
-                    level="WARN",
+                    f"[media] yt-dlp retry {attempt}/{total}: {exc} ({delay:.1f}s)",
+                    level="WARNING",
                 ),
             )
             matches = [name for name in os.listdir(lesson_dir) if name.startswith(os.path.basename(target_base) + ".")]
         if not matches:
-            raise RuntimeError(f"Video dosyasi bulunamadi: {source_title}")
+            raise RuntimeError(f"Downloaded video file was not found for {source_title}")
         downloaded.append(
             {
                 "provider": provider,
@@ -240,9 +240,9 @@ def groq_transcribe_audio(audio_path, api_key, model=GROQ_TRANSCRIPT_MODEL, time
             return json.loads(response.read().decode(charset, errors="replace"))
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"Groq transcript hatasi HTTP {exc.code}: {body[:600]}") from exc
+        raise RuntimeError(f"Groq transcript request failed with HTTP {exc.code}: {body[:600]}") from exc
     except urllib.error.URLError as exc:
-        raise RuntimeError(f"Groq transcript istegi basarisiz: {exc}") from exc
+        raise RuntimeError(f"Groq transcript request failed: {exc}") from exc
 
 
 def format_transcript_text(transcript_response):
@@ -290,8 +290,8 @@ def maybe_transcribe_video(
             base_delay=retry_delay,
             should_retry=is_retryable_error,
             on_retry=lambda attempt, total, exc, delay: log(
-                f"Audio extract retry {attempt}/{total}: {exc} ({delay:.1f}s)",
-                level="WARN",
+                f"[transcript] audio extraction retry {attempt}/{total}: {exc} ({delay:.1f}s)",
+                level="WARNING",
             ),
         )
 
@@ -306,8 +306,8 @@ def maybe_transcribe_video(
         base_delay=retry_delay,
         should_retry=is_retryable_error,
         on_retry=lambda attempt, total, exc, delay: log(
-            f"Transcript retry {attempt}/{total}: {exc} ({delay:.1f}s)",
-            level="WARN",
+            f"[transcript] request retry {attempt}/{total}: {exc} ({delay:.1f}s)",
+            level="WARNING",
         ),
     )
     transcript_text_file, transcript_json_file = save_transcript_files(base_path, transcript_response)

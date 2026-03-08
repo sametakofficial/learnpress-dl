@@ -52,10 +52,10 @@ def build_materials_section_html(materials):
     if not links:
         return ""
 
-    parts = ['<section class="lesson-materials">', "<h2>Materyaller</h2>", "<ul>"]
+    parts = ['<section class="lesson-materials">', "<h2>Materials</h2>", "<ul>"]
     for link in links:
         href = html.escape(link.get("href") or "")
-        text = html.escape(link.get("text") or href or "Materyal")
+        text = html.escape(link.get("text") or href or "Material")
         parts.append(f'<li><a href="{href}">{text}</a></li>')
     parts.extend(["</ul>", "</section>"])
     return "\n".join(parts)
@@ -155,9 +155,9 @@ def build_lesson_text(section_title, title, parser, video_files, materials):
 
     material_links = materials.get("links", []) if materials else []
     if material_links:
-        lines.extend(["", "Materyaller:"])
+        lines.extend(["", "Materials:"])
         for link in material_links:
-            text = link.get("text") or link.get("href") or "Materyal"
+            text = link.get("text") or link.get("href") or "Material"
             href = link.get("href") or ""
             lines.append(f"- {text}: {href}")
 
@@ -165,7 +165,7 @@ def build_lesson_text(section_title, title, parser, video_files, materials):
 
 
 def get_lesson_dirs(output_dir, lesson_meta, title):
-    section_title = lesson_meta.get("section_title") or "Diger"
+    section_title = lesson_meta.get("section_title") or "Other"
     section_dir = os.path.join(
         output_dir,
         ordered_slug(lesson_meta.get("section_index") or 1, section_title, "section"),

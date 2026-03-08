@@ -4,7 +4,8 @@ Cookie-authenticated downloader for LearnPress-based course sites.
 
 It supports:
 
-- `single` and `multi` run modes
+- single-course runs when a URL is provided
+- site-wide runs when no URL is provided
 - site-wide course discovery from a configurable courses page
 - recovery from old partial downloads
 - `fast` and `deep` compare depths before downloading
@@ -62,30 +63,27 @@ Use one of these:
 
 ## Common Usage
 
-### Single mode
+### Download one course
 
 ```bash
 python3 -m learnpress_dl \
-  --run-mode single \
   --cookie-file "/path/to/cookies.txt" \
   "https://www.example.com/courses/.../lessons/.../"
 ```
 
-### Single mode with deep compare
+### Download one course with deep comparison
 
 ```bash
 python3 -m learnpress_dl \
-  --run-mode single \
   --cookie-file "/path/to/cookies.txt" \
   --check-depth deep \
   "https://www.example.com/courses/.../lessons/.../"
 ```
 
-### Multi mode
+### Download all discovered courses
 
 ```bash
 python3 -m learnpress_dl \
-  --run-mode multi \
   --cookie-file "/path/to/cookies.txt" \
   --download-videos \
   --download-transcripts
@@ -95,18 +93,16 @@ python3 -m learnpress_dl \
 
 ```bash
 python3 -m learnpress_dl \
-  --run-mode multi \
   --cookie-file "/path/to/cookies.txt" \
   --base-url "https://example.com" \
   --courses-page "site/kurslar/" \
   --check-depth fast
 ```
 
-### Multi mode with deep compare
+### Download all discovered courses with deep comparison
 
 ```bash
 python3 -m learnpress_dl \
-  --run-mode multi \
   --cookie-file "/path/to/cookies.txt" \
   --check-depth deep \
   --download-videos \
@@ -141,7 +137,6 @@ Every run does discovery -> compare -> download. Compare depth only changes how 
 ```bash
 python3 -m learnpress_dl \
   --cookie-file "/path/to/cookies.txt" \
-  --run-mode multi \
   --download-videos
 ```
 
@@ -150,17 +145,14 @@ python3 -m learnpress_dl \
 ```bash
 python3 -m learnpress_dl \
   --cookie-file "/path/to/cookies.txt" \
-  --run-mode multi \
   --download-videos \
   --download-transcripts
 ```
 
 ## Important Flags
 
-- `--run-mode single|multi`
-  - choose tek kurs veya tum kurslar akisi
 - `--check-depth fast|deep`
-  - karsilastirma asamasi derinligi
+  - comparison depth used during stage 2
 - `--base-url`
   - override `BASE_URL`
 - `--courses-page`
@@ -169,8 +161,12 @@ python3 -m learnpress_dl \
   - download embedded videos for media lessons
 - `--download-transcripts`
   - generate transcripts for downloaded videos
+- `--verbose`
+  - enable debug logging
+- `--quiet`
+  - show warnings and errors only
 - `--tree-progress` / `--no-tree-progress`
-  - enable or disable the live tree UI for multi-course download runs
+  - enable or disable the live tree UI during site-wide runs
 
 ## Recovery and Resume Behavior
 
@@ -197,6 +193,13 @@ Current behavior:
 - transcript files are not regenerated unless the lesson still needs transcript work
 - fast checks only compare sidebar lesson/category structure against local folders
 - deep checks also validate local lesson file sizes and local video/transcript artifacts
+
+## Logging
+
+- default output uses concise `INFO` logs
+- `--verbose` enables `DEBUG` logs for requests, retries, and parser decisions
+- `--quiet` shows warnings and errors only
+- user-facing logs are English-only and intended to be automation-friendly
 
 ## Bootstrap Behavior
 
@@ -235,7 +238,7 @@ downloads/
 
 - `Database Error` / `HTTP 500`
   - usually site-side instability; rerun later and resume from state
-- no courses found in `multi` mode
+- no courses found during site-wide discovery
   - check cookies, `BASE_URL`, and `COURSES_PAGE`
 - transcript failure
   - verify `GROQ_API_KEY`

@@ -3,6 +3,7 @@ import http.cookiejar
 import json
 import random
 import os
+import sys
 import tempfile
 import re
 import socket
@@ -24,7 +25,14 @@ DEFAULT_DOWNLOADS_DIR = os.path.join(PROJECT_ROOT, "downloads")
 PROJECT_ENV_PATH = os.path.join(PROJECT_ROOT, ".env")
 GROQ_TRANSCRIPT_MODEL = "whisper-large-v3-turbo"
 GROQ_TRANSCRIPT_ENDPOINT = "https://api.groq.com/openai/v1/audio/transcriptions"
-LOG_ENABLED = True
+LOG_LEVELS = {
+    "DEBUG": 10,
+    "INFO": 20,
+    "SUCCESS": 20,
+    "WARNING": 30,
+    "ERROR": 40,
+}
+CURRENT_LOG_LEVEL = LOG_LEVELS["INFO"]
 
 VOID_TAGS = {
     "area",
@@ -183,11 +191,11 @@ def run_command(command, timeout=None):
         )
         return completed
     except subprocess.TimeoutExpired as exc:
-        raise RuntimeError(f"Komut timeout oldu: {' '.join(command)}") from exc
+        raise RuntimeError(f"Command timed out: {' '.join(command)}") from exc
     except subprocess.CalledProcessError as exc:
         stderr = (exc.stderr or "").strip()
         stdout = (exc.stdout or "").strip()
-        details = stderr or stdout or "komut basarisiz"
+        details = stderr or stdout or "command failed"
         raise RuntimeError(details[:800]) from exc
 
 
@@ -260,7 +268,7 @@ def resolve_courses_page(dotenv_path=PROJECT_ENV_PATH):
 def build_courses_archive_url(base_url, courses_page=None):
     normalized = normalize_base_url(base_url)
     if not normalized:
-        raise RuntimeError("BASE_URL gecersiz veya bos")
+        raise RuntimeError("BASE_URL is missing or invalid")
     normalized_page = normalize_courses_page(courses_page)
     if re.match(r"^https?://", normalized_page, re.I):
         return normalized_page
@@ -413,6 +421,7 @@ class Downloader:
         return opener
 
     def request_text(self, url, method="GET", headers=None, data=None):
+        log(f"[http] {method} {url}", level="DEBUG")
         request = urllib.request.Request(url, method=method)
         for key, value in (headers or {}).items():
             request.add_header(key, value)
@@ -426,6 +435,7 @@ class Downloader:
                 charset = response.headers.get_content_charset() or "utf-8"
                 text = response.read().decode(charset, errors="replace")
                 final_url = response.geturl()
+                log(f"[http] response url={final_url} status=ok", level="DEBUG")
                 if self.delay:
                     time.sleep(self.delay)
                 return text, final_url
@@ -445,17 +455,18 @@ class Downloader:
             raise RuntimeError(f"Invalid JSON from {url}: {text[:500]}") from exc
 
 
+def set_log_level(level_name):
+    global CURRENT_LOG_LEVEL
+    CURRENT_LOG_LEVEL = LOG_LEVELS.get((level_name or "INFO").upper(), LOG_LEVELS["INFO"])
+
+
+def get_log_level():
+    return CURRENT_LOG_LEVEL
+
+
 def log(message, level="INFO"):
-    if not LOG_ENABLED:
+    normalized_level = (level or "INFO").upper()
+    if LOG_LEVELS.get(normalized_level, LOG_LEVELS["INFO"]) < CURRENT_LOG_LEVEL:
         return
     timestamp = time.strftime("%H:%M:%S")
-    print(f"[{timestamp}] [{level}] {message}", flush=True)
-
-
-def set_log_enabled(enabled):
-    global LOG_ENABLED
-    LOG_ENABLED = bool(enabled)
-
-
-def get_log_enabled():
-    return LOG_ENABLED
+    print(f"[{timestamp}] [{normalized_level}] {message}", file=sys.stderr, flush=True)

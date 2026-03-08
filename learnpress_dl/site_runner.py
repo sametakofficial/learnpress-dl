@@ -1,6 +1,6 @@
 import sys
 
-from .common import DEFAULT_DOWNLOADS_DIR, derive_download_root, ensure_dir, get_log_enabled, log, set_log_enabled
+from .common import DEFAULT_DOWNLOADS_DIR, derive_download_root, ensure_dir, log
 from .course_runner import build_downloader_from_args, print_course_check_summary, run_single_course
 from .discovery import bootstrap_course, discover_courses
 from .inventory import (
@@ -32,7 +32,7 @@ def print_course_bootstrap_summary(index, total, course_info):
 def print_site_check_summary(summary):
     counts = summary["counts"]
     print(
-        "\nGenel ozet\n"
+        "\nSummary\n"
         f"  check depth: {summary.get('check_mode', 'fast')}\n"
         f"  complete: {counts['complete']}\n"
         f"  partial: {counts['partial']}\n"
@@ -49,7 +49,7 @@ def print_site_check_summary(summary):
     if not top_items:
         return
 
-    lines = ["Aksiyon gereken kurslar"]
+    lines = ["Actionable courses"]
     for item in top_items:
         diff = item.get("diff") or {}
         lines.append(
@@ -66,14 +66,11 @@ def should_use_tree_progress(args):
 
 def run_all_courses(args, parser, base_url, courses_page):
     if not base_url:
-        parser.error("Tum kurs modu icin --base-url veya .env icinde BASE_URL gerekli")
+        parser.error("BASE_URL is required when no course URL is provided")
 
     require_videos = args.download_videos or args.download_transcripts
     require_transcripts = args.download_transcripts
     tree_ui = TreeProgressUI(enabled=should_use_tree_progress(args))
-    previous_log_enabled = get_log_enabled()
-    if tree_ui.enabled:
-        set_log_enabled(False)
     downloader = build_downloader_from_args(args)
     try:
         discovery = discover_courses(
@@ -85,9 +82,9 @@ def run_all_courses(args, parser, base_url, courses_page):
         )
         courses = discovery["courses"]
         if not courses:
-            raise SystemExit(f"{discovery['archive_url']} altinda kurs bulunamadi.")
+            raise SystemExit(f"No courses found at {discovery['archive_url']}")
 
-        log(f"{len(courses)} kurs bulundu: {discovery['archive_url']}")
+        log(f"[discover] Found {len(courses)} courses at {discovery['archive_url']}")
         base_output_dir = args.output_dir or DEFAULT_DOWNLOADS_DIR
         ensure_dir(base_output_dir)
         local_index = index_local_courses(
@@ -106,7 +103,7 @@ def run_all_courses(args, parser, base_url, courses_page):
         for index, course in enumerate(courses, start=1):
             course_key = course.get("url")
             tree_ui.set_course_status(course_key, "checking")
-            log(f"[{index}/{len(courses)}] Kurs bootstrap aliniyor: {course.get('title') or course['url']}")
+            log(f"[discover] {index}/{len(courses)} bootstrapping {course.get('title') or course['url']}")
             course_info = bootstrap_course(
                 downloader,
                 course,
@@ -117,7 +114,7 @@ def run_all_courses(args, parser, base_url, courses_page):
                 print_course_bootstrap_summary(index, len(courses), course_info)
 
             if not course_info.get("continue_url"):
-                log(f"[{index}/{len(courses)}] Ilk course-item__link bulunamadi, atlandi: {course_info.get('title') or course_info['url']}", level="WARN")
+                log(f"[discover] {index}/{len(courses)} first course-item__link not found, skipping {course_info.get('title') or course_info['url']}", level="WARNING")
                 tree_ui.set_course_status(course_key, "failed")
                 check_results.append(build_bootstrap_failed_check(course_info, check_mode=args.check_mode))
                 course_infos_for_plan.append(course_info)
@@ -159,7 +156,7 @@ def run_all_courses(args, parser, base_url, courses_page):
             course_plans.append(course_plan)
             tree_ui.set_course_status(course_info.get("url"), course_plan["status"])
             if course_plan["status"] == "complete":
-                log(f"Skip: kurs zaten tamam gorunuyor: {course_plan['course_title']}", level="OK")
+                log(f"[download] Skipping already complete course: {course_plan['course_title']}", level="SUCCESS")
             elif course_plan["status"] in {"resume_needed", "recovery_needed", "new"}:
                 actionable_courses.append((course_info, check, course_plan))
 
@@ -183,14 +180,14 @@ def run_all_courses(args, parser, base_url, courses_page):
         new_count = summary["counts"]["new"]
         bootstrap_failed_count = summary["counts"]["bootstrap_failed"]
         log(
-            f"Check ozeti: complete={complete_count}, partial={partial_count}, new={new_count}, bootstrap_failed={bootstrap_failed_count}"
+            f"[check] complete={complete_count} partial={partial_count} new={new_count} bootstrap_failed={bootstrap_failed_count}"
         )
         if not actionable_courses and bootstrap_failed_count == 0:
-            log("Eksik bir sey yok. Tum kurslar mevcut gereksinimlere gore tamam gorunuyor.", level="OK")
+            log("[download] Nothing to do. All courses already satisfy the requested outputs.", level="SUCCESS")
             return
 
         if not actionable_courses:
-            log("Indirilecek eksik ders bulunamadi. Her sey mevcut gorunuyor.", level="OK")
+            log("[download] No actionable lessons found.", level="SUCCESS")
             return
 
         for course_info, check, course_plan in actionable_courses:
@@ -208,7 +205,7 @@ def run_all_courses(args, parser, base_url, courses_page):
             if check["diff"].get("failed_lessons"):
                 reason.append(f"failed={check['diff']['failed_lessons']}")
             log(
-                f"Resume basliyor: {course_info.get('title') or course_info['url']} [{course_plan['status']}] ({', '.join(reason) or 'work_pending'})"
+                f"[download] Starting {course_info.get('title') or course_info['url']} status={course_plan['status']} details={', '.join(reason) or 'work_pending'}"
             )
             tree_ui.set_course_status(course_key, "running")
             run_single_course(
@@ -220,5 +217,4 @@ def run_all_courses(args, parser, base_url, courses_page):
                 course_title_hint=course_info.get("title"),
             )
     finally:
-        set_log_enabled(previous_log_enabled)
         tree_ui.finish()

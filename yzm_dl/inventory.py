@@ -134,17 +134,14 @@ def match_local_course(index, course_info):
     return index["by_course_url"].get(course_url) or index["by_slug"].get(slug)
 
 
-def build_course_check(course_info, local_record, require_videos=False, require_transcripts=False):
-    remote_lessons = flatten_curriculum_sections(course_info.get("curriculum_sections") or [])
-    remote_by_url = {lesson["url"]: lesson for lesson in remote_lessons}
-
+def _classify_lesson_coverage(remote_lessons, local_lessons_by_url, require_videos=False, require_transcripts=False):
     missing = []
     partial = []
     completed = []
     failed = []
-    local_lessons_by_url = (local_record or {}).get("lessons_by_url") or {}
 
-    for lesson_url in remote_by_url:
+    for lesson in remote_lessons:
+        lesson_url = lesson["url"]
         local_entry = local_lessons_by_url.get(lesson_url)
         if not local_entry:
             missing.append(lesson_url)
@@ -157,7 +154,31 @@ def build_course_check(course_info, local_record, require_videos=False, require_
         else:
             partial.append(lesson_url)
 
-    if not local_record:
+    return missing, partial, completed, failed
+
+
+def build_course_check_from_lessons(
+    course_title,
+    course_url,
+    continue_url,
+    output_dir,
+    remote_lessons,
+    local_lessons_by_url,
+    section_count,
+    require_videos=False,
+    require_transcripts=False,
+    force_status=None,
+):
+    missing, partial, completed, failed = _classify_lesson_coverage(
+        remote_lessons,
+        local_lessons_by_url,
+        require_videos=require_videos,
+        require_transcripts=require_transcripts,
+    )
+
+    if force_status:
+        status = force_status
+    elif not local_lessons_by_url:
         status = "new"
     elif not missing and not partial:
         status = "complete"
@@ -165,13 +186,13 @@ def build_course_check(course_info, local_record, require_videos=False, require_
         status = "partial"
 
     return {
-        "course_title": course_info.get("title") or (local_record or {}).get("title"),
-        "course_url": course_info.get("resolved_url") or course_info.get("url"),
-        "continue_url": course_info.get("continue_url"),
-        "output_dir": (local_record or {}).get("output_dir"),
+        "course_title": course_title,
+        "course_url": course_url,
+        "continue_url": continue_url,
+        "output_dir": output_dir,
         "status": status,
         "remote": {
-            "section_count": course_info.get("section_count", 0),
+            "section_count": section_count,
             "lesson_count": len(remote_lessons),
         },
         "local": {
@@ -190,6 +211,54 @@ def build_course_check(course_info, local_record, require_videos=False, require_
         "missing_lesson_urls": missing,
         "partial_lesson_urls": partial,
         "failed_lesson_urls": failed,
+    }
+
+
+def build_course_check(course_info, local_record, require_videos=False, require_transcripts=False):
+    remote_lessons = flatten_curriculum_sections(course_info.get("curriculum_sections") or [])
+    local_lessons_by_url = (local_record or {}).get("lessons_by_url") or {}
+
+    return build_course_check_from_lessons(
+        course_title=course_info.get("title") or (local_record or {}).get("title"),
+        course_url=course_info.get("resolved_url") or course_info.get("url"),
+        continue_url=course_info.get("continue_url"),
+        output_dir=(local_record or {}).get("output_dir"),
+        remote_lessons=remote_lessons,
+        local_lessons_by_url=local_lessons_by_url,
+        section_count=course_info.get("section_count", 0),
+        require_videos=require_videos,
+        require_transcripts=require_transcripts,
+        force_status="new" if not local_record else None,
+    )
+
+
+def build_bootstrap_failed_check(course_info):
+    lesson_count = course_info.get("lesson_count", 0)
+    return {
+        "course_title": course_info.get("title") or course_info.get("url"),
+        "course_url": course_info.get("resolved_url") or course_info.get("url"),
+        "continue_url": None,
+        "output_dir": None,
+        "status": "bootstrap_failed",
+        "remote": {"section_count": course_info.get("section_count", 0), "lesson_count": lesson_count},
+        "local": {"lesson_count": 0, "completed_lessons": 0, "partial_lessons": 0, "failed_lessons": 0, "missing_lessons": lesson_count},
+        "diff": {"missing_lessons": lesson_count, "partial_lessons": 0, "failed_lessons": 0, "extra_local_lessons": 0},
+        "missing_lesson_urls": [],
+        "partial_lesson_urls": [],
+        "failed_lesson_urls": [],
+    }
+
+
+def compact_course_check(check):
+    return {
+        "course_title": check.get("course_title"),
+        "course_url": check.get("course_url"),
+        "continue_url": check.get("continue_url"),
+        "output_dir": check.get("output_dir"),
+        "status": check.get("status"),
+        "remote": check.get("remote") or {},
+        "local": check.get("local") or {},
+        "diff": check.get("diff") or {},
     }
 
 

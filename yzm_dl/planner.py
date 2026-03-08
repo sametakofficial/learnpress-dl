@@ -199,6 +199,21 @@ def build_site_plan(base_url, archive_url, course_plans):
     }
 
 
+def compact_course_plan(course_plan):
+    return {
+        "course_title": course_plan.get("course_title"),
+        "course_url": course_plan.get("course_url"),
+        "continue_url": course_plan.get("continue_url"),
+        "output_dir": course_plan.get("output_dir"),
+        "status": course_plan.get("status"),
+        "reason": course_plan.get("reason"),
+        "remote": course_plan.get("remote") or {},
+        "local": course_plan.get("local") or {},
+        "diff": course_plan.get("diff") or {},
+        "actionable_lesson_count": course_plan.get("actionable_lesson_count", 0),
+    }
+
+
 def write_course_plan(output_dir, payload, create_dir=False):
     if not output_dir:
         return None

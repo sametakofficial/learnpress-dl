@@ -4,7 +4,9 @@ import tempfile
 import unittest
 
 from yzm_dl.inventory import (
+    build_bootstrap_failed_check,
     build_course_check,
+    compact_course_check,
     index_local_courses,
     match_local_course,
     summarize_site_check,
@@ -142,6 +144,30 @@ class InventoryTests(unittest.TestCase):
             path = write_course_check(existing_dir, payload, create_dir=False)
             self.assertEqual(os.path.join(existing_dir, "course-check.json"), path)
             self.assertTrue(os.path.exists(path))
+
+    def test_compact_course_check_strips_lesson_level_lists(self):
+        compact = compact_course_check(
+            {
+                "course_title": "Course",
+                "course_url": "https://example.com/course",
+                "continue_url": "https://example.com/course/lessons/one",
+                "output_dir": "/tmp/course",
+                "status": "partial",
+                "remote": {"lesson_count": 2},
+                "local": {"completed_lessons": 1},
+                "diff": {"missing_lessons": 1},
+                "missing_lesson_urls": ["one"],
+            }
+        )
+
+        self.assertEqual("Course", compact["course_title"])
+        self.assertNotIn("missing_lesson_urls", compact)
+
+    def test_build_bootstrap_failed_check_marks_missing_course(self):
+        check = build_bootstrap_failed_check({"title": "Course", "url": "https://example.com/course", "section_count": 2, "lesson_count": 7})
+
+        self.assertEqual("bootstrap_failed", check["status"])
+        self.assertEqual(7, check["diff"]["missing_lessons"])
 
 
 if __name__ == "__main__":

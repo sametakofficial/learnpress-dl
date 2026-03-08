@@ -4,7 +4,7 @@ import tempfile
 import unittest
 
 
-from yzm_dl.planner import build_course_plan, build_lesson_plan, build_site_plan, write_course_plan
+from yzm_dl.planner import build_course_plan, build_lesson_plan, build_site_plan, compact_course_plan, write_course_plan
 
 
 class PlannerTests(unittest.TestCase):
@@ -124,6 +124,25 @@ class PlannerTests(unittest.TestCase):
             self.assertTrue(os.path.exists(path))
             with open(path, "r", encoding="utf-8") as handle:
                 self.assertEqual("complete", json.load(handle)["status"])
+
+    def test_compact_course_plan_strips_lesson_payload(self):
+        compact = compact_course_plan(
+            {
+                "course_title": "Course",
+                "course_url": "https://example.com/course",
+                "status": "resume_needed",
+                "reason": "course_has_actionable_lessons",
+                "remote": {"lesson_count": 2},
+                "local": {"completed_lessons": 1},
+                "diff": {"missing_lessons": 1},
+                "actionable_lesson_count": 1,
+                "lessons": [{"lesson_url": "x"}],
+            }
+        )
+
+        self.assertEqual("resume_needed", compact["status"])
+        self.assertEqual(1, compact["actionable_lesson_count"])
+        self.assertNotIn("lessons", compact)
 
 
 if __name__ == "__main__":

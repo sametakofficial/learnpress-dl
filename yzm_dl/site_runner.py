@@ -1,17 +1,19 @@
 import sys
 
-from .common import DEFAULT_DOWNLOADS_DIR, get_log_enabled, log, set_log_enabled
+from .common import DEFAULT_DOWNLOADS_DIR, derive_download_root, ensure_dir, get_log_enabled, log, set_log_enabled
 from .course_runner import build_downloader_from_args, print_course_check_summary, run_single_course
 from .discovery import bootstrap_course, discover_courses
 from .inventory import (
+    build_bootstrap_failed_check,
     build_course_check,
+    compact_course_check,
     index_local_courses,
     match_local_course,
     summarize_site_check,
     write_course_check,
     write_site_check,
 )
-from .planner import build_course_plan, build_site_plan, write_course_plan, write_site_plan
+from .planner import build_course_plan, build_site_plan, compact_course_plan, write_course_plan, write_site_plan
 from .ui import TreeProgressUI
 
 
@@ -84,8 +86,6 @@ def run_all_courses(args, parser, base_url):
 
         log(f"{len(courses)} kurs bulundu: {discovery['archive_url']}")
         base_output_dir = args.output_dir or DEFAULT_DOWNLOADS_DIR
-        from .common import ensure_dir
-
         ensure_dir(base_output_dir)
         local_index = index_local_courses(
             base_output_dir,
@@ -116,29 +116,13 @@ def run_all_courses(args, parser, base_url):
             if not course_info.get("continue_url"):
                 log(f"[{index}/{len(courses)}] Devam Et linki bulunamadi, atlandi: {course_info.get('title') or course_info['url']}", level="WARN")
                 tree_ui.set_course_status(course_key, "failed")
-                check_results.append(
-                    {
-                        "course_title": course_info.get("title") or course_info.get("url"),
-                        "course_url": course_info.get("resolved_url") or course_info.get("url"),
-                        "continue_url": None,
-                        "output_dir": None,
-                        "status": "bootstrap_failed",
-                        "remote": {"section_count": course_info.get("section_count", 0), "lesson_count": course_info.get("lesson_count", 0)},
-                        "local": {"lesson_count": 0, "completed_lessons": 0, "partial_lessons": 0, "failed_lessons": 0, "missing_lessons": course_info.get("lesson_count", 0)},
-                        "diff": {"missing_lessons": course_info.get("lesson_count", 0), "partial_lessons": 0, "failed_lessons": 0, "extra_local_lessons": 0},
-                        "missing_lesson_urls": [],
-                        "partial_lesson_urls": [],
-                        "failed_lesson_urls": [],
-                    }
-                )
+                check_results.append(build_bootstrap_failed_check(course_info))
                 course_infos_for_plan.append(course_info)
                 continue
 
             local_record = match_local_course(local_index, course_info)
             default_output_dir = None
             if not local_record:
-                from .common import derive_download_root
-
                 default_output_dir = derive_download_root(course_info.get("resolved_url") or course_info["url"], downloads_dir=base_output_dir)
 
             check = build_course_check(
@@ -179,10 +163,10 @@ def run_all_courses(args, parser, base_url):
             "base_url": base_url,
             "archive_url": discovery["archive_url"],
             "course_count": len(courses),
-            "checks": check_results,
+            "checks": [compact_course_check(check) for check in check_results],
         }
         write_site_check(base_output_dir, site_check)
-        site_plan = build_site_plan(base_url, discovery["archive_url"], course_plans)
+        site_plan = build_site_plan(base_url, discovery["archive_url"], [compact_course_plan(plan) for plan in course_plans])
         write_site_plan(base_output_dir, site_plan)
         summary = summarize_site_check(check_results)
         if not tree_ui.enabled:
@@ -208,8 +192,6 @@ def run_all_courses(args, parser, base_url):
             course_key = course_info.get("resolved_url") or course_info.get("url")
             course_output_dir = check.get("output_dir")
             if not course_output_dir:
-                from .common import derive_download_root
-
                 course_output_dir = derive_download_root(course_info.get("resolved_url") or course_info["url"], downloads_dir=base_output_dir)
             reason = []
             if course_plan.get("actionable_lesson_count"):

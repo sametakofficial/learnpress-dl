@@ -14,7 +14,7 @@ from .common import (
     resolve_groq_api_key,
     write_text,
 )
-from .inventory import write_course_check
+from .inventory import build_course_check_from_lessons, write_course_check
 from .media import download_videos_for_lesson, maybe_transcribe_video
 from .parsers import (
     collect_via_next,
@@ -93,67 +93,6 @@ def build_section_rows(curriculum_sections):
         }
         for section in curriculum_sections
     ]
-
-
-def build_single_course_check(course_title, course_url, continue_url, output_dir, lesson_items, existing_entries, require_videos, require_transcripts):
-    completed = 0
-    partial = 0
-    failed = 0
-    missing = 0
-    for lesson in lesson_items:
-        existing = existing_entries.get(lesson["url"]) or {}
-        progress = existing.get("progress")
-        if not existing:
-            missing += 1
-            continue
-        if progress and lesson_satisfies_run(progress, require_videos=require_videos, require_transcripts=require_transcripts):
-            completed += 1
-        else:
-            partial += 1
-        if (progress or {}).get("status") == "failed":
-            failed += 1
-
-    status = "complete" if missing == 0 and partial == 0 else "partial"
-    return {
-        "course_title": course_title,
-        "course_url": course_url,
-        "continue_url": continue_url,
-        "output_dir": output_dir,
-        "status": status,
-        "remote": {
-            "section_count": len({lesson.get('section_title') for lesson in lesson_items}),
-            "lesson_count": len(lesson_items),
-        },
-        "local": {
-            "lesson_count": len(existing_entries),
-            "completed_lessons": completed,
-            "partial_lessons": partial,
-            "failed_lessons": failed,
-            "missing_lessons": missing,
-        },
-        "diff": {
-            "missing_lessons": missing,
-            "partial_lessons": partial,
-            "failed_lessons": failed,
-            "extra_local_lessons": max(0, len(existing_entries) - len(lesson_items)),
-        },
-        "missing_lesson_urls": [lesson["url"] for lesson in lesson_items if lesson["url"] not in existing_entries],
-        "partial_lesson_urls": [
-            lesson["url"]
-            for lesson in lesson_items
-            if lesson["url"] in existing_entries
-            and not lesson_satisfies_run(
-                (existing_entries.get(lesson["url"]) or {}).get("progress"),
-                require_videos=require_videos,
-                require_transcripts=require_transcripts,
-            )
-        ],
-        "failed_lesson_urls": [
-            lesson["url"]
-            for lesson in lesson_items
-            if ((existing_entries.get(lesson["url"]) or {}).get("progress") or {}).get("status") == "failed"
-        ],
-    }
 
 
 def ensure_state(output_dir, course_title, start_url, resolved_url, mode, sections, lesson_count, require_videos, require_transcripts):
@@ -557,13 +496,14 @@ def run_single_course(args, start_url, output_dir=None, progress_ui=None, course
             require_transcripts=require_transcripts,
         )
         existing_entries = build_existing_entries(course_args.output_dir, lesson_items, recovered)
-        single_check = build_single_course_check(
-            course_title,
-            course_url,
-            course_args.start_url,
-            course_args.output_dir,
-            lesson_items,
-            existing_entries,
+        single_check = build_course_check_from_lessons(
+            course_title=course_title,
+            course_url=course_url,
+            continue_url=course_args.start_url,
+            output_dir=course_args.output_dir,
+            remote_lessons=lesson_items,
+            local_lessons_by_url=existing_entries,
+            section_count=len(curriculum_sections),
             require_videos=require_videos,
             require_transcripts=require_transcripts,
         )

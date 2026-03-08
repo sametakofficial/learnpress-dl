@@ -44,7 +44,7 @@ def build_parser():
     parser.add_argument("--download-transcripts", action="store_true", help="Generate transcripts for downloaded videos.")
     parser.add_argument("--transcript-timeout", type=float, default=1800.0, help="Timeout for a single transcript request in seconds.")
     parser.add_argument("--audio-timeout", type=float, default=1800.0, help="Timeout for local audio extraction in seconds.")
-    parser.add_argument("--zip-courses", action="store_true", help="Create zip archive(s) for successful course outputs.")
+    parser.add_argument("--zip-courses", action="store_true", help="Create timestamped zip archive(s) for course outputs at the end of the run.")
     parser.add_argument("--retry-failed", action="store_true", help="Skip check mode and retry only locally failed lessons from saved progress files.")
     parser.add_argument("--dotenv-path", default=PROJECT_ENV_PATH, help="Path to the .env file used for configuration.")
     parser.add_argument(

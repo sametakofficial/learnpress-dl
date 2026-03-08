@@ -18,6 +18,7 @@ This plan is based on a local project review plus a GitHub CLI comparison agains
 - parser and retry behavior still need careful hardening over time
 - docs were missing and needed a proper root `README`
 - UI polish should stay secondary; downloader correctness, resumability, and predictability come first
+- check depth should stay binary and simple: shallow by default, deep only when explicitly requested
 
 ## Overengineering Guardrails
 

@@ -62,13 +62,16 @@ def build_downloader_from_args(args):
 
 
 def print_course_check_summary(index, total, check):
+    validation = check.get("validation") or {}
     print(
         f"[{index}/{total}] {check['course_title']} [{check['status']}]\n"
+        f"  check mode: {check.get('check_mode', 'shallow')}\n"
         f"  local dir: {check.get('output_dir') or '-'}\n"
         f"  remote lessons: {check['remote']['lesson_count']}\n"
         f"  local completed: {check['local']['completed_lessons']}\n"
         f"  local partial: {check['local']['partial_lessons']}\n"
-        f"  local missing: {check['local']['missing_lessons']}",
+        f"  local missing: {check['local']['missing_lessons']}\n"
+        f"  validation invalid: {validation.get('invalid_lessons', 0)}",
         flush=True,
     )
 
@@ -506,6 +509,7 @@ def run_single_course(args, start_url, output_dir=None, progress_ui=None, course
             section_count=len(curriculum_sections),
             require_videos=require_videos,
             require_transcripts=require_transcripts,
+            check_mode=course_args.check_mode,
         )
         write_course_check(course_args.output_dir, single_check, create_dir=True)
         single_course_info = {

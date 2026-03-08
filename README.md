@@ -7,7 +7,8 @@ It supports:
 - single-course runs
 - site-wide course discovery from a configurable courses page
 - recovery from old partial downloads
-- lightweight `check` mode before downloading
+- lightweight `--check` mode before downloading
+- optional `--check-deep` mode for file/content/video validation
 - persisted `check` and `plan` files
 - optional video download and optional transcript generation
 
@@ -139,6 +140,19 @@ This flow:
 6. skips completed courses
 7. resumes only actionable courses
 
+## Check Modes
+
+- `--check`
+  - default shallow check
+  - matches the remote LearnPress sidebar lesson/category structure against local course folders
+  - fast and intended as the default preflight behavior
+- `--check-deep`
+  - deeper local validation mode
+  - includes content file presence/length checks and local video/transcript artifact validation
+  - slower than `--check`
+
+Normal non-check runs also use the shallow check/planning model by default.
+
 ### Download videos too
 
 ```bash
@@ -161,7 +175,9 @@ python3 -m learnpress_dl \
 ## Important Flags
 
 - `--check`
-  - inspect and plan only, no download
+  - inspect and plan only, no download; shallow mode
+- `--check-deep`
+  - inspect and plan only, no download; deeper local file validation
 - `--all-courses`
   - run site-wide mode using `BASE_URL` and `COURSES_PAGE`
 - `--discover-only`
@@ -200,6 +216,8 @@ Current behavior:
 - missing lessons are planned as actionable
 - failed lessons are planned for retry
 - transcript files are not regenerated unless the lesson still needs transcript work
+- shallow checks only compare sidebar lesson/category structure against local folders
+- deep checks also validate local lesson file sizes and local video/transcript artifacts
 
 ## Bootstrap Behavior
 

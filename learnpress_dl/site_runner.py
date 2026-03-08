@@ -33,13 +33,15 @@ def print_site_check_summary(summary):
     counts = summary["counts"]
     print(
         "\nGenel ozet\n"
+        f"  check mode: {summary.get('check_mode', 'shallow')}\n"
         f"  complete: {counts['complete']}\n"
         f"  partial: {counts['partial']}\n"
         f"  new: {counts['new']}\n"
         f"  bootstrap_failed: {counts['bootstrap_failed']}\n"
         f"  total missing lessons: {summary['missing_lessons']}\n"
         f"  total partial lessons: {summary['partial_lessons']}\n"
-        f"  total failed lessons: {summary['failed_lessons']}",
+        f"  total failed lessons: {summary['failed_lessons']}\n"
+        f"  total invalid lessons: {summary.get('invalid_lessons', 0)}",
         flush=True,
     )
 
@@ -117,7 +119,7 @@ def run_all_courses(args, parser, base_url, courses_page):
             if not course_info.get("continue_url"):
                 log(f"[{index}/{len(courses)}] Ilk course-item__link bulunamadi, atlandi: {course_info.get('title') or course_info['url']}", level="WARN")
                 tree_ui.set_course_status(course_key, "failed")
-                check_results.append(build_bootstrap_failed_check(course_info))
+                check_results.append(build_bootstrap_failed_check(course_info, check_mode=args.check_mode))
                 course_infos_for_plan.append(course_info)
                 continue
 
@@ -131,6 +133,7 @@ def run_all_courses(args, parser, base_url, courses_page):
                 local_record,
                 require_videos=require_videos,
                 require_transcripts=require_transcripts,
+                check_mode=args.check_mode,
             )
             if not check.get("output_dir"):
                 check["output_dir"] = default_output_dir or (local_record or {}).get("output_dir")
@@ -164,12 +167,14 @@ def run_all_courses(args, parser, base_url, courses_page):
             "base_url": base_url,
             "archive_url": discovery["archive_url"],
             "course_count": len(courses),
+            "check_mode": args.check_mode,
             "checks": [compact_course_check(check) for check in check_results],
         }
         write_site_check(base_output_dir, site_check)
         site_plan = build_site_plan(base_url, discovery["archive_url"], [compact_course_plan(plan) for plan in course_plans])
         write_site_plan(base_output_dir, site_plan)
         summary = summarize_site_check(check_results)
+        summary["check_mode"] = args.check_mode
         if not tree_ui.enabled:
             print_site_check_summary(summary)
 

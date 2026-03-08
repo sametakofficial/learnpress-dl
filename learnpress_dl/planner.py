@@ -168,10 +168,12 @@ def build_course_plan(course_info, local_record, check, require_videos=False, re
         "continue_url": check.get("continue_url") or course_info.get("continue_url"),
         "output_dir": check.get("output_dir"),
         "status": status,
+        "check_mode": check.get("check_mode", "shallow"),
         "reason": reason,
         "remote": check.get("remote") or {"section_count": course_info.get("section_count", 0), "lesson_count": len(remote_lessons)},
         "local": check.get("local") or {},
         "diff": check.get("diff") or {},
+        "validation": check.get("validation") or {},
         "actionable_lesson_count": len(actionable_lessons),
         "lessons": lesson_plans,
     }
@@ -194,6 +196,7 @@ def build_site_plan(base_url, archive_url, course_plans):
         "base_url": base_url,
         "archive_url": archive_url,
         "course_count": len(course_plans),
+        "check_mode": course_plans[0].get("check_mode", "shallow") if course_plans else "shallow",
         "counts": counts,
         "courses": course_plans,
     }
@@ -206,10 +209,12 @@ def compact_course_plan(course_plan):
         "continue_url": course_plan.get("continue_url"),
         "output_dir": course_plan.get("output_dir"),
         "status": course_plan.get("status"),
+        "check_mode": course_plan.get("check_mode", "shallow"),
         "reason": course_plan.get("reason"),
         "remote": course_plan.get("remote") or {},
         "local": course_plan.get("local") or {},
         "diff": course_plan.get("diff") or {},
+        "validation": course_plan.get("validation") or {},
         "actionable_lesson_count": course_plan.get("actionable_lesson_count", 0),
     }
 

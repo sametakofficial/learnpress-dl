@@ -15,6 +15,7 @@ def build_parser():
     parser.add_argument("--all-courses", action="store_true", help="BASE_URL ve COURSES_PAGE altindaki tum kurslari isler")
     parser.add_argument("--discover-only", action="store_true", help="Sadece kurs kesfi ve ilk course-item__link bootstrap ozeti yazdirir")
     parser.add_argument("--check", action="store_true", help="Indirme yapmadan eksik/tamam durumunu kontrol eder")
+    parser.add_argument("--check-deep", action="store_true", help="Indirme yapmadan icerik ve video dosyalarini da derin kontrol eder")
     parser.add_argument(
         "--tree-progress",
         action=argparse.BooleanOptionalAction,
@@ -51,16 +52,25 @@ def resolve_courses_page_from_args(args):
     return args.courses_page or resolve_courses_page(args.dotenv_path)
 
 
+def resolve_check_mode(args):
+    return "deep" if args.check_deep else "shallow"
+
+
 def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(argv)
 
     if not args.cookie_file and not args.cookie_header:
         parser.error("--cookie-file veya --cookie-header vermelisin")
+    if args.check and args.check_deep:
+        parser.error("--check ve --check-deep ayni anda kullanilamaz")
     if args.start_url and args.all_courses:
         parser.error("start_url ile --all-courses ayni anda kullanilamaz")
     if args.start_url and args.discover_only:
         parser.error("--discover-only sadece tum kurs kesfi icin kullanilir")
+    if args.check_deep:
+        args.check = True
+    args.check_mode = resolve_check_mode(args)
 
     base_url = resolve_base_url_from_args(args)
     courses_page = resolve_courses_page_from_args(args)

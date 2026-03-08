@@ -8,6 +8,7 @@ Extend the current downloader into a resilient generic LearnPress downloader tha
 - enters each course page and resolves the first lesson URL from `a.course-item__link`
 - reuses the current lesson/course pipeline instead of rewriting it
 - performs a fast inventory/check pass before heavy downloading begins
+- supports shallow and deep check depth modes
 - preserves existing downloaded videos, lesson files, and paid transcripts
 - can report progress in a course -> category -> lesson tree view with meaningful statuses when useful
 
@@ -20,6 +21,7 @@ Extend the current downloader into a resilient generic LearnPress downloader tha
 - keep recovery compatible with current `state.json`, `progress.json`, and migrated legacy outputs
 - keep site pressure moderate and handle transient site-side `500` failures cleanly
 - prioritize downloader correctness and resume behavior over terminal cosmetics
+- default checks must stay shallow and cheap; deeper validation should be explicit
 
 ## Confirmed Inputs and Site Behavior
 
@@ -53,12 +55,14 @@ Suggested direction:
 - existing single-course mode remains supported when the input URL points directly to a lesson or course
 - `BASE_URL` enables multi-course discovery by default when no explicit course URL is provided
 - add a check-only mode
+- keep check depth split simple: `--check` and `--check-deep`
 - add a download-all mode that runs discovery + check + download
 
 Suggested CLI shape:
 
 ```text
 python3 -m learnpress_dl --check
+python3 -m learnpress_dl --check-deep
 python3 -m learnpress_dl --all-courses
 python3 -m learnpress_dl --all-courses --check-only
 python3 -m learnpress_dl --url <course-or-lesson-url>
@@ -132,6 +136,11 @@ If no `a.course-item__link` is found but the course page is accessible, mark the
 
 The check phase should be fast and much cheaper than a full download.
 
+### Check Depths
+
+- shallow: default for `--check` and normal planning
+- deep: only when `--check-deep` is explicitly requested
+
 ## Purpose
 
 Before downloading, answer these questions:
@@ -152,7 +161,7 @@ For each discovered course:
 4. compare remote outline against local manifest/state/progress files
 5. produce a normalized check result
 
-The check phase should avoid expensive operations:
+The shallow check phase should avoid expensive operations:
 
 - no video downloads
 - no audio extraction
@@ -160,6 +169,8 @@ The check phase should avoid expensive operations:
 - no full lesson rendering unless needed for repair mode
 
 It may fetch course pages and lesson pages only when necessary to detect structure accurately.
+
+Deep check should still avoid redownloading anything, but it may inspect local file sizes, text lengths, and local video durations.
 
 ## Check Output Model
 

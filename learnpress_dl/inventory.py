@@ -1,9 +1,13 @@
 import os
 
-from .common import ensure_dir
+from .common import ensure_dir, ordered_slug, run_command
 from .common import read_json, write_json
 from .parsers import extract_course_slug, extract_course_url, flatten_curriculum_sections
-from .state import infer_progress_from_lesson_meta, lesson_satisfies_run
+from .state import file_nonempty, infer_progress_from_lesson_meta, is_media_classification, lesson_satisfies_run
+
+
+CHECK_MODE_SHALLOW = "shallow"
+CHECK_MODE_DEEP = "deep"
 
 
 def _lesson_inventory_from_dir(lesson_dir):
@@ -134,11 +138,115 @@ def match_local_course(index, course_info):
     return index["by_course_url"].get(course_url) or index["by_slug"].get(slug)
 
 
-def _classify_lesson_coverage(remote_lessons, local_lessons_by_url, require_videos=False, require_transcripts=False):
+def _expected_lesson_dir(output_dir, lesson):
+    if not output_dir:
+        return None
+    section_title = lesson.get("section_title") or "Diger"
+    lesson_title = lesson.get("title") or "lesson"
+    section_dir = os.path.join(output_dir, ordered_slug(lesson.get("section_index") or 1, section_title, "section"))
+    return os.path.join(section_dir, ordered_slug(lesson.get("lesson_in_section") or 1, lesson_title, "lesson"))
+
+
+def _build_shallow_local_lessons_by_url(output_dir, remote_lessons):
+    lessons_by_url = {}
+    for lesson in remote_lessons:
+        lesson_dir = _expected_lesson_dir(output_dir, lesson)
+        if lesson_dir and os.path.isdir(lesson_dir):
+            lessons_by_url[lesson["url"]] = {"lesson_dir": lesson_dir}
+    return lessons_by_url
+
+
+def _read_text_length(path):
+    if not file_nonempty(path):
+        return 0
+    with open(path, "r", encoding="utf-8") as handle:
+        return len(handle.read().strip())
+
+
+def _probe_media_duration_seconds(path):
+    if not file_nonempty(path):
+        return 0.0
+    try:
+        completed = run_command(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                path,
+            ],
+            timeout=30,
+        )
+        return float((completed.stdout or "0").strip() or "0")
+    except Exception:
+        return 0.0
+
+
+def deep_validate_lesson(local_entry, require_videos=False, require_transcripts=False):
+    lesson_meta = (local_entry or {}).get("lesson_meta") or {}
+    progress = (local_entry or {}).get("progress") or {}
+    lesson_dir = (local_entry or {}).get("lesson_dir")
+    classification = progress.get("classification") or lesson_meta.get("content_type") or "unknown"
+    issues = []
+    metrics = {}
+
+    if not lesson_dir or not os.path.isdir(lesson_dir):
+        return {"ok": False, "issues": ["missing_lesson_dir"], "metrics": {}}
+
+    html_path = os.path.join(lesson_dir, "lesson.html")
+    text_path = os.path.join(lesson_dir, "lesson.txt")
+    json_path = os.path.join(lesson_dir, "lesson.json")
+
+    if not file_nonempty(html_path):
+        issues.append("missing_html")
+    if not file_nonempty(text_path):
+        issues.append("missing_text")
+    if not file_nonempty(json_path):
+        issues.append("missing_json")
+
+    metrics["html_size_bytes"] = os.path.getsize(html_path) if os.path.exists(html_path) else 0
+    metrics["text_length"] = _read_text_length(text_path)
+    if file_nonempty(text_path) and metrics["text_length"] < 20:
+        issues.append("text_too_short")
+
+    videos = lesson_meta.get("videos") or []
+    if is_media_classification(classification):
+        metrics["video_count"] = len(videos)
+        if require_videos and not videos:
+            issues.append("missing_video_metadata")
+
+    for index, video in enumerate(videos, start=1):
+        prefix = f"video_{index}"
+        video_path = os.path.join(lesson_dir, video.get("file")) if video.get("file") else None
+        duration = _probe_media_duration_seconds(video_path) if video_path else 0.0
+        metrics[f"{prefix}_duration_seconds"] = duration
+        if require_videos and duration <= 0:
+            issues.append(f"{prefix}_invalid_duration")
+
+        transcript = video.get("transcript") or {}
+        if require_transcripts:
+            audio_path = os.path.join(lesson_dir, transcript.get("audio_file")) if transcript.get("audio_file") else None
+            text_transcript_path = os.path.join(lesson_dir, transcript.get("transcript_text_file")) if transcript.get("transcript_text_file") else None
+            json_transcript_path = os.path.join(lesson_dir, transcript.get("transcript_json_file")) if transcript.get("transcript_json_file") else None
+            if not audio_path or not file_nonempty(audio_path):
+                issues.append(f"{prefix}_missing_audio")
+            if not text_transcript_path or not file_nonempty(text_transcript_path):
+                issues.append(f"{prefix}_missing_transcript_text")
+            if not json_transcript_path or not file_nonempty(json_transcript_path):
+                issues.append(f"{prefix}_missing_transcript_json")
+
+    return {"ok": not issues, "issues": issues, "metrics": metrics}
+
+
+def _classify_lesson_coverage(remote_lessons, local_lessons_by_url, require_videos=False, require_transcripts=False, check_mode=CHECK_MODE_SHALLOW):
     missing = []
     partial = []
     completed = []
     failed = []
+    validations = {}
 
     for lesson in remote_lessons:
         lesson_url = lesson["url"]
@@ -146,15 +254,24 @@ def _classify_lesson_coverage(remote_lessons, local_lessons_by_url, require_vide
         if not local_entry:
             missing.append(lesson_url)
             continue
+        if check_mode == CHECK_MODE_SHALLOW:
+            completed.append(lesson_url)
+            continue
         progress = local_entry.get("progress")
+        validation = deep_validate_lesson(
+            local_entry,
+            require_videos=require_videos,
+            require_transcripts=require_transcripts,
+        )
+        validations[lesson_url] = validation
         if progress and progress.get("status") == "failed":
             failed.append(lesson_url)
-        if progress and lesson_satisfies_run(progress, require_videos=require_videos, require_transcripts=require_transcripts):
+        if validation["ok"] and progress and lesson_satisfies_run(progress, require_videos=require_videos, require_transcripts=require_transcripts):
             completed.append(lesson_url)
         else:
             partial.append(lesson_url)
 
-    return missing, partial, completed, failed
+    return missing, partial, completed, failed, validations
 
 
 def build_course_check_from_lessons(
@@ -168,12 +285,17 @@ def build_course_check_from_lessons(
     require_videos=False,
     require_transcripts=False,
     force_status=None,
+    check_mode=CHECK_MODE_SHALLOW,
 ):
-    missing, partial, completed, failed = _classify_lesson_coverage(
+    if check_mode == CHECK_MODE_SHALLOW:
+        local_lessons_by_url = _build_shallow_local_lessons_by_url(output_dir, remote_lessons)
+
+    missing, partial, completed, failed, validations = _classify_lesson_coverage(
         remote_lessons,
         local_lessons_by_url,
         require_videos=require_videos,
         require_transcripts=require_transcripts,
+        check_mode=check_mode,
     )
 
     if force_status:
@@ -191,6 +313,7 @@ def build_course_check_from_lessons(
         "continue_url": continue_url,
         "output_dir": output_dir,
         "status": status,
+        "check_mode": check_mode,
         "remote": {
             "section_count": section_count,
             "lesson_count": len(remote_lessons),
@@ -211,10 +334,19 @@ def build_course_check_from_lessons(
         "missing_lesson_urls": missing,
         "partial_lesson_urls": partial,
         "failed_lesson_urls": failed,
+        "validation": {
+            "checked_lessons": len(validations),
+            "invalid_lessons": sum(1 for item in validations.values() if not item.get("ok")),
+            "issues": {
+                lesson_url: validation.get("issues", [])
+                for lesson_url, validation in validations.items()
+                if validation.get("issues")
+            },
+        },
     }
 
 
-def build_course_check(course_info, local_record, require_videos=False, require_transcripts=False):
+def build_course_check(course_info, local_record, require_videos=False, require_transcripts=False, check_mode=CHECK_MODE_SHALLOW):
     remote_lessons = flatten_curriculum_sections(course_info.get("curriculum_sections") or [])
     local_lessons_by_url = (local_record or {}).get("lessons_by_url") or {}
 
@@ -229,10 +361,11 @@ def build_course_check(course_info, local_record, require_videos=False, require_
         require_videos=require_videos,
         require_transcripts=require_transcripts,
         force_status="new" if not local_record else None,
+        check_mode=check_mode,
     )
 
 
-def build_bootstrap_failed_check(course_info):
+def build_bootstrap_failed_check(course_info, check_mode=CHECK_MODE_SHALLOW):
     lesson_count = course_info.get("lesson_count", 0)
     return {
         "course_title": course_info.get("title") or course_info.get("url"),
@@ -240,12 +373,14 @@ def build_bootstrap_failed_check(course_info):
         "continue_url": None,
         "output_dir": None,
         "status": "bootstrap_failed",
+        "check_mode": check_mode,
         "remote": {"section_count": course_info.get("section_count", 0), "lesson_count": lesson_count},
         "local": {"lesson_count": 0, "completed_lessons": 0, "partial_lessons": 0, "failed_lessons": 0, "missing_lessons": lesson_count},
         "diff": {"missing_lessons": lesson_count, "partial_lessons": 0, "failed_lessons": 0, "extra_local_lessons": 0},
         "missing_lesson_urls": [],
         "partial_lesson_urls": [],
         "failed_lesson_urls": [],
+        "validation": {"checked_lessons": 0, "invalid_lessons": 0, "issues": {}},
     }
 
 
@@ -256,9 +391,11 @@ def compact_course_check(check):
         "continue_url": check.get("continue_url"),
         "output_dir": check.get("output_dir"),
         "status": check.get("status"),
+        "check_mode": check.get("check_mode", CHECK_MODE_SHALLOW),
         "remote": check.get("remote") or {},
         "local": check.get("local") or {},
         "diff": check.get("diff") or {},
+        "validation": check.get("validation") or {},
     }
 
 
@@ -288,6 +425,7 @@ def summarize_site_check(checks):
     missing_lessons = 0
     partial_lessons = 0
     failed_lessons = 0
+    invalid_lessons = 0
 
     for check in checks:
         status = check.get("status")
@@ -297,6 +435,8 @@ def summarize_site_check(checks):
         missing_lessons += diff.get("missing_lessons", 0)
         partial_lessons += diff.get("partial_lessons", 0)
         failed_lessons += diff.get("failed_lessons", 0)
+        validation = check.get("validation") or {}
+        invalid_lessons += validation.get("invalid_lessons", 0)
 
     actionable = [
         check
@@ -316,5 +456,6 @@ def summarize_site_check(checks):
         "missing_lessons": missing_lessons,
         "partial_lessons": partial_lessons,
         "failed_lessons": failed_lessons,
+        "invalid_lessons": invalid_lessons,
         "actionable": actionable,
     }

@@ -33,7 +33,7 @@ def print_site_check_summary(summary):
     counts = summary["counts"]
     print(
         "\nGenel ozet\n"
-        f"  check mode: {summary.get('check_mode', 'shallow')}\n"
+        f"  check depth: {summary.get('check_mode', 'fast')}\n"
         f"  complete: {counts['complete']}\n"
         f"  partial: {counts['partial']}\n"
         f"  new: {counts['new']}\n"
@@ -61,7 +61,7 @@ def print_site_check_summary(summary):
 def should_use_tree_progress(args):
     if args.tree_progress is not None:
         return args.tree_progress
-    return not args.check and not args.discover_only and sys.stdout.isatty()
+    return sys.stdout.isatty()
 
 
 def run_all_courses(args, parser, base_url, courses_page):
@@ -178,16 +178,15 @@ def run_all_courses(args, parser, base_url, courses_page):
         if not tree_ui.enabled:
             print_site_check_summary(summary)
 
-        if args.discover_only or args.check:
-            complete_count = summary["counts"]["complete"]
-            partial_count = summary["counts"]["partial"]
-            new_count = summary["counts"]["new"]
-            bootstrap_failed_count = summary["counts"]["bootstrap_failed"]
-            log(
-                f"Check ozeti: complete={complete_count}, partial={partial_count}, new={new_count}, bootstrap_failed={bootstrap_failed_count}"
-            )
-            if not actionable_courses and bootstrap_failed_count == 0:
-                log("Eksik bir sey yok. Tum kurslar mevcut gereksinimlere gore tamam gorunuyor.", level="OK")
+        complete_count = summary["counts"]["complete"]
+        partial_count = summary["counts"]["partial"]
+        new_count = summary["counts"]["new"]
+        bootstrap_failed_count = summary["counts"]["bootstrap_failed"]
+        log(
+            f"Check ozeti: complete={complete_count}, partial={partial_count}, new={new_count}, bootstrap_failed={bootstrap_failed_count}"
+        )
+        if not actionable_courses and bootstrap_failed_count == 0:
+            log("Eksik bir sey yok. Tum kurslar mevcut gereksinimlere gore tamam gorunuyor.", level="OK")
             return
 
         if not actionable_courses:

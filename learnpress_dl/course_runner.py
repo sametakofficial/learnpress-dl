@@ -65,7 +65,7 @@ def print_course_check_summary(index, total, check):
     validation = check.get("validation") or {}
     print(
         f"[{index}/{total}] {check['course_title']} [{check['status']}]\n"
-        f"  check mode: {check.get('check_mode', 'shallow')}\n"
+        f"  check depth: {check.get('check_mode', 'fast')}\n"
         f"  local dir: {check.get('output_dir') or '-'}\n"
         f"  remote lessons: {check['remote']['lesson_count']}\n"
         f"  local completed: {check['local']['completed_lessons']}\n"
@@ -537,10 +537,6 @@ def run_single_course(args, start_url, output_dir=None, progress_ui=None, course
             print_course_plan_summary(single_course_plan)
         if progress_ui:
             progress_ui.register_course(effective_course_key, course_title, status=single_course_plan["status"])
-        if course_args.check:
-            if single_course_plan["status"] == "complete":
-                log("Eksik bir sey yok. Bu kurs mevcut gereksinimlere gore tamam gorunuyor.", level="OK")
-            return {"completed": single_check["local"]["completed_lessons"], "failed": single_check["local"]["failed_lessons"], "total": len(lesson_items)}
         if single_course_plan["status"] == "complete":
             log("Indirilecek eksik ders bulunamadi. Bu kurs tamam gorunuyor.", level="OK")
             if progress_ui:

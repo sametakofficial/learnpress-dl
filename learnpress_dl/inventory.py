@@ -6,7 +6,7 @@ from .parsers import extract_course_slug, extract_course_url, flatten_curriculum
 from .state import file_nonempty, infer_progress_from_lesson_meta, is_media_classification, lesson_satisfies_run
 
 
-CHECK_MODE_SHALLOW = "shallow"
+CHECK_MODE_FAST = "fast"
 CHECK_MODE_DEEP = "deep"
 
 
@@ -241,7 +241,7 @@ def deep_validate_lesson(local_entry, require_videos=False, require_transcripts=
     return {"ok": not issues, "issues": issues, "metrics": metrics}
 
 
-def _classify_lesson_coverage(remote_lessons, local_lessons_by_url, require_videos=False, require_transcripts=False, check_mode=CHECK_MODE_SHALLOW):
+def _classify_lesson_coverage(remote_lessons, local_lessons_by_url, require_videos=False, require_transcripts=False, check_mode=CHECK_MODE_FAST):
     missing = []
     partial = []
     completed = []
@@ -254,7 +254,7 @@ def _classify_lesson_coverage(remote_lessons, local_lessons_by_url, require_vide
         if not local_entry:
             missing.append(lesson_url)
             continue
-        if check_mode == CHECK_MODE_SHALLOW:
+        if check_mode == CHECK_MODE_FAST:
             completed.append(lesson_url)
             continue
         progress = local_entry.get("progress")
@@ -285,9 +285,11 @@ def build_course_check_from_lessons(
     require_videos=False,
     require_transcripts=False,
     force_status=None,
-    check_mode=CHECK_MODE_SHALLOW,
+    check_mode=CHECK_MODE_FAST,
 ):
-    if check_mode == CHECK_MODE_SHALLOW:
+    if force_status == "new":
+        local_lessons_by_url = {}
+    elif check_mode == CHECK_MODE_FAST:
         local_lessons_by_url = _build_shallow_local_lessons_by_url(output_dir, remote_lessons)
 
     missing, partial, completed, failed, validations = _classify_lesson_coverage(
@@ -346,7 +348,7 @@ def build_course_check_from_lessons(
     }
 
 
-def build_course_check(course_info, local_record, require_videos=False, require_transcripts=False, check_mode=CHECK_MODE_SHALLOW):
+def build_course_check(course_info, local_record, require_videos=False, require_transcripts=False, check_mode=CHECK_MODE_FAST):
     remote_lessons = flatten_curriculum_sections(course_info.get("curriculum_sections") or [])
     local_lessons_by_url = (local_record or {}).get("lessons_by_url") or {}
 
@@ -365,7 +367,7 @@ def build_course_check(course_info, local_record, require_videos=False, require_
     )
 
 
-def build_bootstrap_failed_check(course_info, check_mode=CHECK_MODE_SHALLOW):
+def build_bootstrap_failed_check(course_info, check_mode=CHECK_MODE_FAST):
     lesson_count = course_info.get("lesson_count", 0)
     return {
         "course_title": course_info.get("title") or course_info.get("url"),
@@ -391,7 +393,7 @@ def compact_course_check(check):
         "continue_url": check.get("continue_url"),
         "output_dir": check.get("output_dir"),
         "status": check.get("status"),
-        "check_mode": check.get("check_mode", CHECK_MODE_SHALLOW),
+        "check_mode": check.get("check_mode", CHECK_MODE_FAST),
         "remote": check.get("remote") or {},
         "local": check.get("local") or {},
         "diff": check.get("diff") or {},

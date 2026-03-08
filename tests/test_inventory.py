@@ -5,7 +5,7 @@ import unittest
 
 from learnpress_dl.inventory import (
     CHECK_MODE_DEEP,
-    CHECK_MODE_SHALLOW,
+    CHECK_MODE_FAST,
     build_bootstrap_failed_check,
     build_course_check,
     build_course_check_from_lessons,
@@ -161,11 +161,11 @@ class InventoryTests(unittest.TestCase):
                 remote_lessons=remote_lessons,
                 local_lessons_by_url={},
                 section_count=1,
-                check_mode=CHECK_MODE_SHALLOW,
+                check_mode=CHECK_MODE_FAST,
             )
 
             self.assertEqual("complete", check["status"])
-            self.assertEqual(CHECK_MODE_SHALLOW, check["check_mode"])
+            self.assertEqual(CHECK_MODE_FAST, check["check_mode"])
             self.assertEqual(1, check["local"]["completed_lessons"])
 
     def test_deep_validate_lesson_detects_missing_content_files(self):

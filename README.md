@@ -77,6 +77,64 @@ Important detail:
 - the executable automatically looks for `yt-dlp.exe`, `ffmpeg.exe`, and `ffprobe.exe` next to itself
 - this avoids asking end users to install those tools globally
 
+## Docker Support
+
+The project now includes `Dockerfile` and `docker-compose.yml` so it can run on Docker Desktop without installing Python, `ffmpeg`, or `yt-dlp` on the host.
+
+Recommended host layout:
+
+```text
+learnpress-dl/
+  .env
+  docker-compose.yml
+  runtime/
+    cookies.txt
+  downloads/
+```
+
+Quick start:
+
+1. Copy `.env.example` to `.env` and fill in your values.
+2. Put your Netscape cookie export at `runtime/cookies.txt`.
+3. Run:
+
+```bash
+docker compose up --build learnpress-dl
+```
+
+Default compose behavior:
+
+- reads cookies from `/work/runtime/cookies.txt`
+- writes output to `/work/downloads`
+- enables video download, transcripts, fast check depth, and run-level zip archives
+
+Retry only local failures:
+
+```bash
+docker compose run --rm learnpress-dl \
+  --cookie-file /work/runtime/cookies.txt \
+  --output-dir /work/downloads \
+  --retry-failed \
+  --download-videos \
+  --download-transcripts \
+  --parallel 1 \
+  --zip-courses \
+  --verbose
+```
+
+Run a single course:
+
+```bash
+docker compose run --rm learnpress-dl \
+  --cookie-file /work/runtime/cookies.txt \
+  --output-dir /work/downloads \
+  --download-videos \
+  --download-transcripts \
+  --parallel 2 \
+  --zip-courses \
+  "https://www.example.com/courses/.../lessons/.../"
+```
+
 ## Authentication
 
 Use one of these:

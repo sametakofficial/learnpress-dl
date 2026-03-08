@@ -1,0 +1,14 @@
+.git
+.env
+.venv-build
+__pycache__
+build
+dist
+downloads
+runtime
+tests
+tmp-transcript-probe
+full-course.log
+*.pyc
+*.pyo
+*.zip

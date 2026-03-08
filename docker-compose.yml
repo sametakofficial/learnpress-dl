@@ -1,0 +1,25 @@
+services:
+  learnpress-dl:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: learnpress-dl:local
+    env_file:
+      - .env
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./downloads:/work/downloads
+      - ./runtime:/work/runtime
+    command:
+      - --cookie-file
+      - /work/runtime/cookies.txt
+      - --output-dir
+      - /work/downloads
+      - --download-videos
+      - --download-transcripts
+      - --check-depth
+      - fast
+      - --parallel
+      - "2"
+      - --zip-courses

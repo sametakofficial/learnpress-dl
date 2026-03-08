@@ -29,6 +29,8 @@ class MediaTests(unittest.TestCase):
         self.assertIn("--referer", command)
         self.assertIn("https://example.com/lesson", command)
         self.assertIn("--user-agent", command)
+        self.assertIn("--extractor-args", command)
+        self.assertIn("generic:impersonate", command)
         self.assertIn("--no-cookies", command)
         self.assertNotIn("--cookies", command)
         self.assertNotIn("--add-header", command)

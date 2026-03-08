@@ -62,6 +62,8 @@ def download_with_ytdlp(downloader, iframe_src, output_path, page_url, timeout_s
         "--user-agent",
         DEFAULT_UA,
         "--no-playlist",
+        "--extractor-args",
+        "generic:impersonate",
     ]
     if include_cookies:
         if getattr(downloader, "cookie_file", None):

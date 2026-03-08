@@ -1,16 +1,19 @@
+x-learnpress-defaults: &learnpress-defaults
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: learnpress-dl:local
+  env_file:
+    - .env
+  stdin_open: true
+  tty: true
+  volumes:
+    - ./downloads:/work/downloads
+    - ./runtime:/work/runtime
+
 services:
   learnpress-dl:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: learnpress-dl:local
-    env_file:
-      - .env
-    stdin_open: true
-    tty: true
-    volumes:
-      - ./downloads:/work/downloads
-      - ./runtime:/work/runtime
+    <<: *learnpress-defaults
     command:
       - --cookie-file
       - /work/runtime/cookies.txt
@@ -22,4 +25,18 @@ services:
       - fast
       - --parallel
       - "2"
+      - --zip-courses
+
+  learnpress-dl-retry-failed:
+    <<: *learnpress-defaults
+    command:
+      - --cookie-file
+      - /work/runtime/cookies.txt
+      - --output-dir
+      - /work/downloads
+      - --retry-failed
+      - --download-videos
+      - --download-transcripts
+      - --parallel
+      - "1"
       - --zip-courses

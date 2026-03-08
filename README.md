@@ -96,7 +96,7 @@ Quick start:
 
 1. Copy `.env.example` to `.env` and fill in your values.
 2. Put your Netscape cookie export at `runtime/cookies.txt`.
-3. Run:
+3. Run the default full downloader service:
 
 ```bash
 docker compose up --build learnpress-dl
@@ -107,19 +107,12 @@ Default compose behavior:
 - reads cookies from `/work/runtime/cookies.txt`
 - writes output to `/work/downloads`
 - enables video download, transcripts, fast check depth, and run-level zip archives
+- includes a separate retry service with the same defaults
 
-Retry only local failures:
+Retry only local failures with the built-in retry service:
 
 ```bash
-docker compose run --rm learnpress-dl \
-  --cookie-file /work/runtime/cookies.txt \
-  --output-dir /work/downloads \
-  --retry-failed \
-  --download-videos \
-  --download-transcripts \
-  --parallel 1 \
-  --zip-courses \
-  --verbose
+docker compose up --build learnpress-dl-retry-failed
 ```
 
 Run a single course:

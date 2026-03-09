@@ -158,8 +158,10 @@ def _canva_extract_video_slides(bootstrap_data):
                 }
             )
         if files:
+            video_sequence = len(video_slides) + 1
             video_slides.append(
                 {
+                    "sequence": video_sequence,
                     "title": page.get("title", ""),
                     "duration": duration,
                     "width": page.get("width", 0),
@@ -245,7 +247,7 @@ def download_canva_videos(embed_url, lesson_dir, target_base, timeout_seconds=60
         if len(video_slides) == 1:
             out_path = f"{target_base}.mp4"
         else:
-            out_path = f"{target_base}-part{slide_idx + 1:02d}.mp4"
+            out_path = f"{target_base}-part{slide.get('sequence', slide_idx + 1):02d}.mp4"
 
         if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
             log(f"[canva] already exists: {os.path.basename(out_path)}", level="DEBUG")
@@ -283,7 +285,7 @@ def download_videos_for_lesson(downloader, lesson_dir, page_url, parser, timeout
 
         matches = [name for name in os.listdir(lesson_dir) if name.startswith(os.path.basename(target_base) + ".")]
 
-        if not matches and provider == "canva":
+        if provider == "canva":
             canva_files = retry_call(
                 lambda: download_canva_videos(
                     source["iframe_src"],

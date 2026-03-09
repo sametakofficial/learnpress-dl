@@ -8,7 +8,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python -m pip install --no-cache-dir yt-dlp
+RUN python -m pip install --no-cache-dir "yt-dlp[default,curl-cffi]"
 
 WORKDIR /app
 
